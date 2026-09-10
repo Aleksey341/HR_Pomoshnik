@@ -34,6 +34,7 @@ jobs:
       - name: Check managed gateway JavaScript
         run: |
           node --check api/_lib/managed.js
+          node --check api/access/check.js
           node --check api/ai/analyze.js
           node --check api/firecrawl/search.js
           node --check api/firecrawl/scrape.js
@@ -47,6 +48,15 @@ jobs:
 
       - name: Run managed access tests
         run: node --test tests/managed-access.test.mjs
+
+      - name: Reject committed API secrets
+        shell: bash
+        run: |
+          if grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='.env.example' \
+            '(sk-[A-Za-z0-9_-]{20,}|fc-[A-Za-z0-9_-]{20,})' .; then
+            echo 'Possible API secret committed to repository'
+            exit 1
+          fi
 
       - name: Build static site
         run: python scripts/build_static.py
