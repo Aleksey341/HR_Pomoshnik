@@ -1,4 +1,4 @@
 {
-  "mode": "direct",
-  "managed_base_url": ""
+  "mode": "managed",
+  "managed_base_url": "/api"
 }
