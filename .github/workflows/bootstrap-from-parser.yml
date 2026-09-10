@@ -1,8 +1,6 @@
-name: Bootstrap from Parser
+name: Bootstrap from Parser (manual only)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -10,7 +8,6 @@ permissions:
 
 jobs:
   bootstrap:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout target repository
@@ -40,6 +37,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Import Parser project into HR_Pomoshnik"
+            git commit -m "Refresh HR_Pomoshnik from Parser"
             git push origin main
           fi
