@@ -16,7 +16,7 @@ export async function getServiceConfig() {
         const data = await res.json();
         return {
           mode: String(data?.mode || 'direct').toLowerCase(),
-          managed_base_url: String(data?.managed_base_url || '').replace(/\/$/, '')
+          managed_base_url: String(data?.managed_base_url || '').trim().replace(/\/$/, '')
         };
       })
       .catch(() => ({ mode: 'direct', managed_base_url: '' }));
@@ -25,11 +25,22 @@ export async function getServiceConfig() {
 }
 
 export async function getApiRuntime() {
+  if (USE_LOCAL_PROXY) {
+    return { managed: false, base: API_BASE, mode: 'direct' };
+  }
   const cfg = await getServiceConfig();
-  const managed = cfg.mode === 'managed' && /^https:\/\//i.test(cfg.managed_base_url);
+  let managedBase = '';
+  if (cfg.managed_base_url) {
+    try {
+      managedBase = new URL(cfg.managed_base_url, location.origin).href.replace(/\/$/, '');
+    } catch {
+      managedBase = '';
+    }
+  }
+  const managed = cfg.mode === 'managed' && /^https?:\/\//i.test(managedBase);
   return {
     managed,
-    base: managed ? cfg.managed_base_url : API_BASE,
+    base: managed ? managedBase : API_BASE,
     mode: managed ? 'managed' : 'direct'
   };
 }
