@@ -13,6 +13,12 @@ async function applyRuntimeUi() {
   const openAiField = document.getElementById('openaiKey')?.closest('.field');
   const heroLead = document.getElementById('heroLead');
   const banner = document.getElementById('serverBanner');
+  const brand = document.querySelector('.topbar-brand');
+  const heroTitle = document.querySelector('.hero h1');
+
+  document.title = 'HR Помощник';
+  if (brand) brand.textContent = 'HR Помощник';
+  if (heroTitle) heroTitle.textContent = 'HR Помощник: поиск, исследования и AI-анализ';
 
   if (runtime.managed) {
     if (apiLabel) apiLabel.textContent = 'Код доступа HR Помощник';
@@ -24,7 +30,6 @@ async function applyRuntimeUi() {
     if (openAiField) openAiField.style.display = 'none';
     if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск или исследование и получите AI-анализ собранных материалов.';
     if (banner) banner.innerHTML = 'Защищённый режим: запросы идут через managed gateway. OpenAI и Firecrawl API keys хранятся только на сервере.';
-    document.title = 'HR Помощник';
   }
 }
 
