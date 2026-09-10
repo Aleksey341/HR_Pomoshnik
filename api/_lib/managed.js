@@ -13,18 +13,50 @@ function safeHexEqual(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-function configuredHashes() {
+function configuredLegacyHashes() {
   return (process.env.MANAGED_ACCESS_CODE_HASHES || "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 }
 
-export function isAllowedAccessCode(code) {
-  const hashes = configuredHashes();
-  if (!code || hashes.length === 0) return false;
+function configuredUsers() {
+  const raw = String(process.env.MANAGED_ACCESS_USERS_JSON || "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    const entries = Array.isArray(parsed)
+      ? parsed
+      : Object.entries(parsed).map(([user, hash]) => ({ user, hash }));
+    return entries
+      .map((item) => ({
+        user: String(item?.user || "").trim(),
+        hash: String(item?.hash || "").trim().toLowerCase(),
+        enabled: item?.enabled !== false,
+      }))
+      .filter((item) => item.user && item.enabled && /^[a-f0-9]{64}$/i.test(item.hash));
+  } catch (_error) {
+    return [];
+  }
+}
+
+export function resolveAccessUser(code) {
+  if (!code) return null;
   const digest = sha256(code);
-  return hashes.some((allowed) => safeHexEqual(digest, allowed));
+
+  for (const item of configuredUsers()) {
+    if (safeHexEqual(digest, item.hash)) return item.user;
+  }
+
+  for (const hash of configuredLegacyHashes()) {
+    if (safeHexEqual(digest, hash)) return "legacy";
+  }
+
+  return null;
+}
+
+export function isAllowedAccessCode(code) {
+  return Boolean(resolveAccessUser(code));
 }
 
 export function applyCors(req, res) {
@@ -61,10 +93,12 @@ export function requireManagedAccess(req, res) {
   const auth = String(req.headers.authorization || "");
   const match = auth.match(/^Bearer\s+(.+)$/i);
   const code = match ? match[1].trim() : "";
-  if (!isAllowedAccessCode(code)) {
+  const user = resolveAccessUser(code);
+  if (!user) {
     res.status(401).json({ error: "Неверный или отключённый код доступа HR Помощник" });
     return false;
   }
+  req.hrPomoshnikUser = user;
   return true;
 }
 
@@ -87,7 +121,11 @@ export async function proxyJson({ url, method = "POST", apiKey, body }) {
   try {
     const upstream = await fetch(url, options);
     const text = await upstream.text();
-    return { status: upstream.status, text, contentType: upstream.headers.get("content-type") || "application/json" };
+    return {
+      status: upstream.status,
+      text,
+      contentType: upstream.headers.get("content-type") || "application/json",
+    };
   } catch (_error) {
     return {
       status: 502,
