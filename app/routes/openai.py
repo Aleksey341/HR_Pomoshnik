@@ -25,8 +25,13 @@ def analyze():
     if not messages:
         return jsonify({"error": "Нет messages для анализа"}), 400
 
-    model = str(payload.get("model") or "gpt-4o-mini")
-    body = {"model": model, "messages": messages, "temperature": 0.3}
+    model = str(payload.get("model") or "gpt-5.6-sol")
+    body = {
+        "model": model,
+        "messages": messages,
+        "reasoning_effort": "none",
+        "max_completion_tokens": 2200,
+    }
     data, status = openai_client.chat_completion(body, api_key)
     if status >= 400:
         return jsonify(data), status
