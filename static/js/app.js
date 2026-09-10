@@ -46,6 +46,28 @@ function installAccessCheck(runtime, apiField, apiInput) {
   apiField.append(button, status);
 }
 
+function installAiNavigation() {
+  const tab = document.getElementById('tabAiBtn');
+  if (!tab) return;
+
+  tab.classList.remove('tab-hidden');
+
+  if (tab.dataset.autoOpenInstalled === '1') return;
+  tab.dataset.autoOpenInstalled = '1';
+
+  const observer = new MutationObserver(() => {
+    if (tab.classList.contains('tab-new')) {
+      tab.click();
+      tab.classList.remove('tab-new');
+    }
+  });
+
+  observer.observe(tab, {
+    attributes: true,
+    attributeFilter: ['class']
+  });
+}
+
 async function applyRuntimeUi() {
   const runtime = await getApiRuntime();
   const apiInput = document.getElementById('apiKey');
@@ -81,6 +103,7 @@ async function applyRuntimeUi() {
     if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск или исследование и получите AI-анализ собранных материалов.';
     if (banner) banner.textContent = 'Защищённый режим: используйте персональный код HRP. OpenAI и Firecrawl API-ключи хранятся только на сервере.';
     installAccessCheck(runtime, apiField, apiInput);
+    installAiNavigation();
   }
 }
 
