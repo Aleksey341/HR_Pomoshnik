@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Сборка GitHub Pages из templates/ + static/ и синхронизация plate-pattern.js."""
+"""Сборка GitHub Pages из templates/ + static/ и синхронизация runtime-конфига."""
 
 from __future__ import annotations
 
@@ -43,7 +43,11 @@ def build_docs() -> None:
         shutil.rmtree(docs_static)
     shutil.copytree(ROOT / "static", docs_static)
 
+    service_config = ROOT / "service.json"
+    if service_config.exists():
+        shutil.copy2(service_config, DOCS / "service.json")
+
 
 if __name__ == "__main__":
     build_docs()
-    print("Built docs/ from templates/ + static/ (plate-pattern.js synced)")
+    print("Built docs/ from templates/ + static/ and copied service.json")
