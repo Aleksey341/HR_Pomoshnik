@@ -1,7 +1,7 @@
-import { API_BASE, USE_LOCAL_PROXY } from './config.js';
+import { API_BASE, USE_LOCAL_PROXY, getApiRuntime } from './config.js';
 import { extractApiError } from './api.js';
 import { getLastPayload, setLastAiReport } from './state.js';
-import { getOpenAiKey, saveOpenAiKey } from './storage.js';
+import { getApiKey, getOpenAiKey, saveOpenAiKey } from './storage.js';
 import { esc, hideError, hideLoader, hideProgress, runLoader, setProgress, showError, showToast } from './ui.js';
 import { updateResultsViewForTab } from './results.js';
 
@@ -101,15 +101,37 @@ ${ctx.text}
 }
 
 async function callOpenAiAnalysis(prompt) {
-  saveOpenAiKey();
-  const openaiKey = getOpenAiKey() || undefined;
   const payload = {
-    openaiKey,
-    model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: prompt.system },
       { role: 'user', content: prompt.user }
-    ]
+    ],
+    max_completion_tokens: 2200
+  };
+
+  const runtime = await getApiRuntime();
+  if (runtime.managed) {
+    const accessCode = getApiKey();
+    if (!accessCode) throw new Error('Введите код доступа HR Помощник');
+    const res = await fetch(`${runtime.base}/ai/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessCode}`
+      },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || extractApiError(json, res.status));
+    return json.content || json.text || '';
+  }
+
+  saveOpenAiKey();
+  const openaiKey = getOpenAiKey() || undefined;
+  const directPayload = {
+    openaiKey,
+    model: 'gpt-5.6-sol',
+    messages: payload.messages
   };
 
   if (USE_LOCAL_PROXY) {
@@ -118,7 +140,7 @@ async function callOpenAiAnalysis(prompt) {
     const res = await fetch(`${API_BASE}/api/ai/analyze`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(payload)
+      body: JSON.stringify(directPayload)
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || extractApiError(json, res.status));
@@ -127,9 +149,7 @@ async function callOpenAiAnalysis(prompt) {
 
   const apiKey = getOpenAiKey();
   if (!apiKey) {
-    throw new Error(
-      'Укажите ключ OpenAI (sk-…) или запустите python server.py с OPENAI_API_KEY'
-    );
+    throw new Error('Для direct-режима укажите OpenAI API key или включите managed service');
   }
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -139,9 +159,10 @@ async function callOpenAiAnalysis(prompt) {
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: payload.model,
+      model: 'gpt-5.6-sol',
       messages: payload.messages,
-      temperature: 0.3
+      reasoning_effort: 'none',
+      max_completion_tokens: 2200
     })
   });
   const json = await res.json().catch(() => ({}));
@@ -164,7 +185,7 @@ export async function doAiAnalyze() {
     try {
       setProgress('aiProgress', 'Формирование промпта…');
       const prompt = buildAiPrompt();
-      setProgress('aiProgress', 'Отправка в GPT-4o-mini…');
+      setProgress('aiProgress', 'Отправка в ИИ…');
       const report = await callOpenAiAnalysis(prompt);
       if (!report.trim()) throw new Error('ИИ вернул пустой ответ');
       renderAiReport(report);
@@ -172,7 +193,7 @@ export async function doAiAnalyze() {
       showToast('AI-анализ готов');
     } catch (e) {
       showError(e.message || String(e));
-      showToast('Ошибка AI-анализа — попробуйте «Скопировать промпт для ChatGPT»');
+      showToast('Ошибка AI-анализа — можно использовать «Скопировать промпт для ChatGPT»');
     } finally {
       hideLoader('ai');
       hideProgress('aiProgress');
