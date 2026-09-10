@@ -28,32 +28,59 @@ function renderAiReport(text) {
   updateResultsViewForTab('ai');
 }
 
+function excerptText(value, limit) {
+  const text = String(value || '');
+  if (text.length <= limit) return text;
+
+  const marker = '\n\n[...часть длинного источника сокращена из-за общего лимита контекста...]\n\n';
+  const available = Math.max(0, limit - marker.length);
+  const head = Math.floor(available * 0.65);
+  const tail = Math.max(0, available - head);
+  return `${text.slice(0, head)}${marker}${text.slice(-tail)}`;
+}
+
 function buildResearchContextForAi(useMarkdown) {
-  const items = getLastPayload()?.items || [];
-  const maxItems = 30;
-  const mdLimit = 900;
-  let total = 0;
-  const maxTotal = 14000;
+  const allItems = getLastPayload()?.items || [];
+  const items = allItems.slice(0, 30);
+  const maxTotal = 120000;
+  const metadataReserve = 12000;
+  const textBudget = Math.max(0, maxTotal - metadataReserve);
+  const perItemMdLimit = items.length
+    ? Math.min(75000, Math.max(3000, Math.floor(textBudget / items.length)))
+    : 0;
+
+  let totalChars = 0;
   const blocks = [];
 
-  for (const it of items.slice(0, maxItems)) {
+  for (const it of items) {
     let chunk = `### ${it.title || 'Без названия'}\nURL: ${it.url || it.sourceURL || '—'}\n`;
     if (it.searchKeyword) chunk += `Ключ: ${it.searchKeyword}\n`;
     if (it.description || it.snippet) {
       chunk += `Описание: ${it.description || it.snippet}\n`;
     }
     if (useMarkdown && (it.markdown || it.content)) {
-      chunk += `\nТекст:\n${String(it.markdown || it.content).slice(0, mdLimit)}\n`;
+      chunk += `\nТекст:\n${excerptText(it.markdown || it.content, perItemMdLimit)}\n`;
     }
-    if (total + chunk.length > maxTotal) break;
+
+    const remaining = maxTotal - totalChars;
+    if (remaining <= 0) break;
+    if (chunk.length > remaining) {
+      if (remaining > 500) {
+        blocks.push(excerptText(chunk, remaining));
+        totalChars += remaining;
+      }
+      break;
+    }
+
     blocks.push(chunk);
-    total += chunk.length;
+    totalChars += chunk.length;
   }
 
   return {
     text: blocks.join('\n---\n'),
     used: blocks.length,
-    total: items.length
+    total: allItems.length,
+    characters: totalChars
   };
 }
 
@@ -70,11 +97,11 @@ export function buildAiPrompt() {
     ...new Set((lastPayload?.items || []).map((i) => i.searchKeyword).filter(Boolean))
   ];
 
-  const userPrompt = `Техническое задание анализа:\n${brief}\n\n${focus ? `Дополнительный фокус анализа:\n${focus}\n\n` : ''}Статистика сбора:\n- Всего источников: ${ctx.total}\n- Передано в анализ: ${ctx.used}\n${keywords.length ? `- Ключевые запросы: ${keywords.slice(0, 15).join('; ')}${keywords.length > 15 ? '…' : ''}\n` : ''}\nМатериалы (заголовок, URL, фрагмент текста):\n${ctx.text}\n\nИнструкция:\n1. Прочитай техническое задание и дополнительный фокус — они задают тему, цели и нужную структуру отчёта.\n2. Если в задании уже перечислены разделы, таблицы, KPI или вопросы — используй их как оглавление отчёта.\n3. Если структура не задана — предложи универсальную:\n   - краткая сводка;\n   - ключевые находки с URL;\n   - паттерны и противоречия;\n   - пробелы в данных;\n   - рекомендации и следующие шаги.\n4. Опирайся только на переданные материалы. Не выдумывай факты.\n5. Если данных нет — пиши «нет данных». Отделяй факты от планов и заявлений.\n6. Ответ — на русском, в markdown.`;
+  const userPrompt = `Техническое задание анализа:\n${brief}\n\n${focus ? `Дополнительный фокус анализа:\n${focus}\n\n` : ''}Статистика сбора:\n- Всего источников: ${ctx.total}\n- Передано в анализ: ${ctx.used}\n- Объём переданного контекста: ${ctx.characters} символов\n${keywords.length ? `- Ключевые запросы: ${keywords.slice(0, 15).join('; ')}${keywords.length > 15 ? '…' : ''}\n` : ''}\nМатериалы:\n${ctx.text}\n\nИнструкция:\n1. Прочитай техническое задание и дополнительный фокус: они задают тему, цели и нужную структуру отчёта.\n2. Анализируй весь переданный материал, включая разделы в середине и конце длинных источников. Не делай вывод «нет данных», пока не проверил весь доступный контекст.\n3. Если в задании уже перечислены разделы, таблицы, KPI или вопросы, используй их как оглавление отчёта.\n4. Если структура не задана, используй: краткая сводка; ключевые находки с URL; паттерны и противоречия; пробелы в данных; рекомендации и следующие шаги.\n5. Опирайся только на переданные материалы. Не выдумывай факты. Если данных действительно нет, пиши «нет данных».\n6. Отделяй факты от выводов и рекомендаций.\n7. Ответ на русском, в корректном markdown. Не экранируй символы markdown обратными слешами без необходимости.`;
 
   return {
     system:
-      'Ты аналитик открытых источников. Синтезируй переданные материалы в отчёт строго по целям пользователя, без привязки к конкретной отрасли.',
+      'Ты аналитик открытых источников. Синтезируй переданные материалы в точный и практически полезный отчёт строго по целям пользователя.',
     user: userPrompt
   };
 }
@@ -85,7 +112,7 @@ async function callOpenAiAnalysis(prompt) {
       { role: 'system', content: prompt.system },
       { role: 'user', content: prompt.user }
     ],
-    max_completion_tokens: 2200
+    max_completion_tokens: 4500
   };
 
   const runtime = await getApiRuntime();
@@ -141,7 +168,7 @@ async function callOpenAiAnalysis(prompt) {
       model: 'gpt-5.6-sol',
       messages: payload.messages,
       reasoning_effort: 'none',
-      max_completion_tokens: 2200
+      max_completion_tokens: 4500
     })
   });
   const json = await res.json().catch(() => ({}));
@@ -172,7 +199,7 @@ export async function doAiAnalyze() {
       showToast('AI-анализ готов');
     } catch (e) {
       showError(e.message || String(e));
-      showToast('Ошибка AI-анализа — можно использовать «Скопировать промпт для ChatGPT»');
+      showToast('Ошибка AI-анализа - можно использовать «Скопировать промпт для ChatGPT»');
     } finally {
       hideLoader('ai');
       hideProgress('aiProgress');
@@ -190,7 +217,7 @@ export async function copyAiPrompt() {
   const full = `${prompt.system}\n\n---\n\n${prompt.user}`;
   try {
     await navigator.clipboard.writeText(full);
-    showToast('Промпт скопирован — вставьте в ChatGPT');
+    showToast('Промпт скопирован - вставьте в ChatGPT');
   } catch {
     showToast('Не удалось скопировать');
   }
