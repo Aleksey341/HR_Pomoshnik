@@ -1,14 +1,43 @@
 import { initStorage } from './storage.js';
 import { abortActiveRequest } from './api.js';
+import { getApiRuntime } from './config.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
+
+async function applyRuntimeUi() {
+  const runtime = await getApiRuntime();
+  const apiInput = document.getElementById('apiKey');
+  const apiField = apiInput?.closest('.field');
+  const apiLabel = apiField?.querySelector('label');
+  const apiHint = apiField?.querySelector('.hint');
+  const openAiField = document.getElementById('openaiKey')?.closest('.field');
+  const heroLead = document.getElementById('heroLead');
+  const banner = document.getElementById('serverBanner');
+
+  if (runtime.managed) {
+    if (apiLabel) apiLabel.textContent = 'Код доступа HR Помощник';
+    if (apiInput) {
+      apiInput.placeholder = 'HRP-xxxxxxxx';
+      apiInput.setAttribute('data-tip', 'Введите персональный код доступа, выданный администратором');
+    }
+    if (apiHint) apiHint.textContent = 'Один код используется для поиска, парсинга и AI-анализа. Серверные API-ключи пользователю не выдаются.';
+    if (openAiField) openAiField.style.display = 'none';
+    if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск или исследование и получите AI-анализ собранных материалов.';
+    if (banner) banner.innerHTML = 'Защищённый режим: запросы идут через managed gateway. OpenAI и Firecrawl API keys хранятся только на сервере.';
+    document.title = 'HR Помощник';
+  }
+}
 
 async function loadLegacy() {
   await import('./legacy.js');
 }
 
 initStorage();
-loadLegacy().catch(err => {
-  console.error(err);
-  alert('Не удалось загрузить интерфейс: ' + (err.message || err));
-});
+applyRuntimeUi()
+  .catch(err => console.warn('Runtime UI config:', err))
+  .finally(() => {
+    loadLegacy().catch(err => {
+      console.error(err);
+      alert('Не удалось загрузить интерфейс: ' + (err.message || err));
+    });
+  });
