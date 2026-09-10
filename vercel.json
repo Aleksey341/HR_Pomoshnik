@@ -1,6 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 120
+    }
+  },
   "rewrites": [
     { "source": "/", "destination": "/docs/index.html" },
+    { "source": "/admin", "destination": "/admin.html" },
     { "source": "/static/:path*", "destination": "/docs/static/:path*" },
     { "source": "/service.json", "destination": "/docs/service.json" }
   ],
@@ -9,6 +16,13 @@
       "source": "/api/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
+      "source": "/admin",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
       ]
     }
   ]
