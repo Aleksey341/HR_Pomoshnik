@@ -8,26 +8,32 @@
 
 ## Reporting a vulnerability
 
-If you discover a security issue, please report it privately to the repository owner. Do not open a public issue with exploit details.
+If you discover a security issue, report it privately to the repository owner. Do not open a public issue with exploit details or credentials.
 
-## Known safeguards (v2)
+## Managed access safeguards
 
-- `/api/firecrawl/get` accepts only `https://api.firecrawl.dev/v2/...` URLs in the `next` parameter (SSRF guard).
-- API keys for proxy GET are sent via `Authorization: Bearer` / `X-Api-Key`, **not** in the query string (avoids access-log leaks).
-- API keys are not forwarded to third-party domains by the proxy.
-- CORS is limited to configured origins (`CORS_ORIGINS`); preflight allows `Authorization` and `X-Api-Key`.
-- Response hardening: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`.
-- Request body size capped (`MAX_CONTENT_LENGTH` = 2 MB).
-- In-memory rate limit on API routes (`RATE_LIMIT_PER_MINUTE`, default 60).
-- Browser keys are not persisted in `localStorage` by default; optional session-only storage (`sessionStorage`).
+- Production users receive only a personal code `HRP-...`.
+- `OPENAI_API_KEY` and `FIRECRAWL_API_KEY` are stored only as backend Environment Variables.
+- Real API keys must never be committed to GitHub, `service.json`, frontend JavaScript or documentation.
+- User access codes are checked against SHA-256 hashes from `MANAGED_ACCESS_CODE_HASHES`.
+- Hash comparison uses `crypto.timingSafeEqual`.
+- A user can be revoked by removing the corresponding hash from the server configuration.
+- Managed endpoints require `Authorization: Bearer HRP-...`.
+- CORS is restricted through `CORS_ORIGINS`.
+- `/api/firecrawl/get` only proxies URLs under `https://api.firecrawl.dev/v2`.
+- Gateway responses use `Cache-Control: no-store`.
 
-## Deployment recommendations
+## Browser storage
 
-- Run the local proxy only on `127.0.0.1` (default in `server.py`).
-- Keep `FIRECRAWL_API_KEY` and `OPENAI_API_KEY` in environment variables / `.env` (see `.env.example`), not in git. `server.py` loads `.env` via python-dotenv.
-- Review `logs/firecrawl_credits.log` for unexpected usage spikes.
-- Do not expose the proxy to the public internet without additional auth; rate limit alone is not enough.
+Keys/codes are not stored in `localStorage`. Optional persistence uses `sessionStorage`, which is limited to the browser tab/session.
 
-## Legacy note
+## Local mode safeguards
 
-Root `index.html` / `firecrawl_parser.html` redirect to `docs/`. Prefer `templates/` + `static/` (local server) or `docs/` (GitHub Pages).
+- Run the local Flask proxy on `127.0.0.1`.
+- Local `FIRECRAWL_API_KEY` and `OPENAI_API_KEY` belong in `.env` or environment variables.
+- `.env`, logs and other local secrets must stay outside Git.
+- Local API routes retain request validation, CORS checks and rate limiting.
+
+## Deployment
+
+See `docs/MANAGED-SERVICE.md` for production setup. Before enabling `service.json` mode `managed`, configure backend secrets and at least one user access-code hash.
