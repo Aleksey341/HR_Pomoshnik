@@ -25,13 +25,24 @@
 Пользователь -> HRP-код -> HR Помощник gateway -> OpenAI / Firecrawl
 ```
 
-Для выдачи кода:
+Для постоянного администрирования пользователей:
 
 ```powershell
-python scripts/make_access_code.py
+python scripts/access_users.py add ivan.petrov
+python scripts/access_users.py list
+python scripts/access_users.py disable ivan.petrov
+python scripts/access_users.py export
 ```
 
-Пользователь получает `ACCESS_CODE`. На сервере сохраняется только его SHA-256 hash в `MANAGED_ACCESS_CODE_HASHES`.
+Открытый `ACCESS_CODE` показывается только при создании пользователя. Локальный `access-users.json` хранит имя, SHA-256 и статус, включён в `.gitignore` и не содержит самого открытого кода.
+
+Разовая генерация без реестра:
+
+```powershell
+python scripts/make_access_code.py --user ivan.petrov
+```
+
+На backend основной реестр задаётся в `MANAGED_ACCESS_USERS_JSON`.
 
 Подробно: [docs/MANAGED-SERVICE.md](docs/MANAGED-SERVICE.md).
 
@@ -56,7 +67,7 @@ python scripts/make_access_code.py
 
 - `api/ai/analyze.js` - OpenAI gateway;
 - `api/firecrawl/*` - Firecrawl gateway;
-- `api/health.js` - проверка конфигурации;
+- `api/health.js` - безопасная проверка конфигурации;
 - `vercel.json` - маршрутизация frontend;
 - `package.json` - Node runtime.
 
@@ -67,9 +78,11 @@ OPENAI_API_KEY
 FIRECRAWL_API_KEY
 OPENAI_MODEL=gpt-5.6-sol
 OPENAI_REASONING_EFFORT=none
-MANAGED_ACCESS_CODE_HASHES
+MANAGED_ACCESS_USERS_JSON
 CORS_ORIGINS
 ```
+
+`MANAGED_ACCESS_CODE_HASHES` поддерживается для совместимости со старой схемой.
 
 Реальные ключи нельзя коммитить в GitHub.
 
@@ -102,9 +115,9 @@ HR_Pomoshnik/
 ├── app/                 # локальное Flask-приложение
 ├── static/              # клиентский JavaScript/CSS
 ├── templates/           # HTML-шаблон
-├── docs/                # статическая сборка
-├── scripts/             # сборка и генерация HRP-кодов
-├── tests/               # pytest
+├── docs/                # статическая сборка и документация
+├── scripts/             # сборка и управление HRP-пользователями
+├── tests/               # Python и Node-тесты
 ├── service.json         # direct/managed runtime mode
 ├── vercel.json
 ├── server.py
@@ -113,6 +126,6 @@ HR_Pomoshnik/
 
 ## Безопасность
 
-Секреты исключаются из Git. Пользовательские коды в managed mode проверяются по SHA-256. CORS ограничивается разрешёнными Origin. Код, введённый пользователем, может сохраняться только в `sessionStorage` до закрытия вкладки.
+Секреты исключаются из Git. Пользовательские коды в managed mode проверяются по SHA-256. Именованного пользователя можно отключить отдельно. CORS ограничивается разрешёнными Origin. Код, введённый пользователем, может сохраняться только в `sessionStorage` до закрытия вкладки.
 
 См. [SECURITY.md](SECURITY.md) и [docs/MANAGED-SERVICE.md](docs/MANAGED-SERVICE.md).
