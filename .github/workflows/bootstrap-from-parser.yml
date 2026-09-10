@@ -1,0 +1,45 @@
+name: Bootstrap from Parser
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone Parser source
+        run: git clone --depth 1 https://github.com/Aleksey341/Parser.git /tmp/parser-source
+
+      - name: Copy project files
+        run: |
+          rsync -a \
+            --exclude '.git/' \
+            --exclude '.github/workflows/bootstrap-from-parser.yml' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            --exclude '.env' \
+            --exclude 'logs/' \
+            /tmp/parser-source/ ./
+
+      - name: Commit imported project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Import Parser project into HR_Pomoshnik"
+            git push origin main
+          fi
