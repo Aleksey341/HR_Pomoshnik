@@ -1,4 +1,11 @@
-import { API_BASE, FIRECRAWL_API, MAX_SEARCH_LIMIT, REQUEST_TIMEOUT_MS, USE_LOCAL_PROXY } from './config.js';
+import {
+  API_BASE,
+  FIRECRAWL_API,
+  MAX_SEARCH_LIMIT,
+  REQUEST_TIMEOUT_MS,
+  USE_LOCAL_PROXY,
+  getApiRuntime
+} from './config.js';
 import { getApiKey } from './storage.js';
 
 let activeController = null;
@@ -53,13 +60,35 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_M
   }
 }
 
+function requireAccessCode() {
+  const code = getApiKey();
+  if (!code) throw new Error('Введите код доступа HR Помощник');
+  return code;
+}
+
+async function managedJson(url, options = {}) {
+  const code = requireAccessCode();
+  const headers = {
+    ...(options.headers || {}),
+    Authorization: `Bearer ${code}`
+  };
+  const res = await fetchWithTimeout(url, { ...options, headers });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(extractApiError(json, res.status));
+  if (json.success === false) throw new Error(extractApiError(json, res.status));
+  trackCredits(json);
+  return json;
+}
+
 export function buildDirectPayload(kind, body) {
   if (kind === 'search') {
     const query = String(body.query || '').trim();
     const limit = Math.max(1, Math.min(parseInt(body.limit, 10) || 5, MAX_SEARCH_LIMIT));
     const payload = { query, limit };
 
-    const domains = (body.includeDomains || []).map(d => String(d).trim().replace(/^https?:\/\//i, '').split('/')[0]).filter(Boolean);
+    const domains = (body.includeDomains || [])
+      .map(d => String(d).trim().replace(/^https?:\/\//i, '').split('/')[0])
+      .filter(Boolean);
     if (domains.length) payload.includeDomains = domains;
     if (body.tbs) payload.tbs = body.tbs;
 
@@ -101,8 +130,17 @@ export async function apiPost(path, body) {
 }
 
 export async function firecrawlRequest(kind, body) {
+  const runtime = await getApiRuntime();
+  if (runtime.managed) {
+    return managedJson(`${runtime.base}/firecrawl/${kind}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildDirectPayload(kind, body))
+    });
+  }
+
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error('Укажите API-ключ в поле слева');
+  if (!apiKey) throw new Error('Укажите API-ключ Firecrawl в поле слева');
 
   if (USE_LOCAL_PROXY) return apiPost(`/api/firecrawl/${kind}`, body);
 
@@ -127,8 +165,16 @@ export async function firecrawlRequest(kind, body) {
 }
 
 export async function firecrawlGet(pathOrUrl) {
+  const runtime = await getApiRuntime();
+  if (runtime.managed) {
+    const params = new URLSearchParams();
+    if (pathOrUrl.startsWith('http')) params.set('next', pathOrUrl);
+    else params.set('path', pathOrUrl);
+    return managedJson(`${runtime.base}/firecrawl/get?${params}`, { cache: 'no-store' });
+  }
+
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error('Укажите API-ключ в поле слева');
+  if (!apiKey) throw new Error('Укажите API-ключ Firecrawl в поле слева');
 
   if (USE_LOCAL_PROXY) {
     const params = new URLSearchParams();
@@ -173,8 +219,17 @@ function buildCrawlPayload(body) {
 }
 
 export async function firecrawlCrawlStart(body) {
+  const runtime = await getApiRuntime();
+  if (runtime.managed) {
+    return managedJson(`${runtime.base}/firecrawl/crawl`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildCrawlPayload(body))
+    });
+  }
+
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error('Укажите API-ключ в поле слева');
+  if (!apiKey) throw new Error('Укажите API-ключ Firecrawl в поле слева');
 
   if (USE_LOCAL_PROXY) return apiPost('/api/firecrawl/crawl', body);
 
@@ -217,15 +272,9 @@ function looksWeakClient(json) {
   const html = String(json?.data?.html || '').toLowerCase();
   if (md.length < 80) return true;
   const blob = `${html.slice(0, 4000)} ${md.slice(0, 500).toLowerCase()}`;
-  return /just a moment|checking your browser|cf-browser-verification|access denied|captcha|cloudflare/i.test(
-    blob
-  );
+  return /just a moment|checking your browser|cf-browser-verification|access denied|captcha|cloudflare/i.test(blob);
 }
 
-/**
- * Умный scrape: Firecrawl (если есть ключ) → при пустом/challenge — curl_cffi → browser.
- * На Pages без прокси остаётся только Firecrawl.
- */
 export async function scrapeSmart(url, formats = ['markdown']) {
   const tried = [];
   let lastJson = null;
