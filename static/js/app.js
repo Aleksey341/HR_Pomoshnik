@@ -52,6 +52,8 @@ async function applyRuntimeUi() {
   const apiField = apiInput?.closest('.field');
   const apiLabel = apiField?.querySelector('label');
   const apiHint = apiField?.querySelector('.hint');
+  const accessCardHead = apiField?.closest('.card')?.querySelector('.card-head');
+  const rememberLabel = document.getElementById('rememberKeys')?.closest('label');
   const openAiField = document.getElementById('openaiKey')?.closest('.field');
   const heroLead = document.getElementById('heroLead');
   const banner = document.getElementById('serverBanner');
@@ -63,15 +65,21 @@ async function applyRuntimeUi() {
   if (heroTitle) heroTitle.textContent = 'HR Помощник: поиск, исследования и AI-анализ';
 
   if (runtime.managed) {
+    if (accessCardHead) accessCardHead.textContent = 'Доступ';
     if (apiLabel) apiLabel.textContent = 'Код доступа HR Помощник';
     if (apiInput) {
       apiInput.placeholder = 'HRP-xxxxxxxx';
       apiInput.setAttribute('data-tip', 'Введите персональный код доступа, выданный администратором');
     }
     if (apiHint) apiHint.textContent = 'Один код используется для поиска, парсинга и AI-анализа. Серверные API-ключи пользователю не выдаются.';
+    if (rememberLabel) {
+      const checkbox = document.getElementById('rememberKeys');
+      rememberLabel.textContent = '';
+      if (checkbox) rememberLabel.append(checkbox, document.createTextNode(' Запомнить код доступа в этой вкладке'));
+    }
     if (openAiField) openAiField.style.display = 'none';
     if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск или исследование и получите AI-анализ собранных материалов.';
-    if (banner) banner.innerHTML = 'Защищённый режим: запросы идут через managed gateway. OpenAI и Firecrawl API keys хранятся только на сервере.';
+    if (banner) banner.textContent = 'Защищённый режим: используйте персональный код HRP. OpenAI и Firecrawl API-ключи хранятся только на сервере.';
     installAccessCheck(runtime, apiField, apiInput);
   }
 }
@@ -80,12 +88,28 @@ async function loadLegacy() {
   await import('./legacy.js');
 }
 
-initStorage();
-applyRuntimeUi()
-  .catch(err => console.warn('Runtime UI config:', err))
-  .finally(() => {
-    loadLegacy().catch(err => {
-      console.error(err);
-      alert('Не удалось загрузить интерфейс: ' + (err.message || err));
-    });
-  });
+async function bootstrap() {
+  initStorage();
+
+  try {
+    await applyRuntimeUi();
+  } catch (err) {
+    console.warn('Runtime UI config:', err);
+  }
+
+  try {
+    await loadLegacy();
+  } catch (err) {
+    console.error(err);
+    alert('Не удалось загрузить интерфейс: ' + (err.message || err));
+    return;
+  }
+
+  try {
+    await applyRuntimeUi();
+  } catch (err) {
+    console.warn('Runtime UI config after legacy:', err);
+  }
+}
+
+bootstrap();
