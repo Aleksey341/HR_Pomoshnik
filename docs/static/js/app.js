@@ -4,6 +4,48 @@ import { getApiRuntime } from './config.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
 
+function installAccessCheck(runtime, apiField, apiInput) {
+  if (!apiField || !apiInput || document.getElementById('btnCheckAccess')) return;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.id = 'btnCheckAccess';
+  button.className = 'btn-sm';
+  button.style.marginTop = '.5rem';
+  button.style.width = '100%';
+  button.textContent = 'Проверить доступ';
+
+  const status = document.createElement('p');
+  status.id = 'accessCheckStatus';
+  status.className = 'hint';
+  status.style.marginTop = '.4rem';
+
+  button.addEventListener('click', async () => {
+    const code = apiInput.value.trim();
+    if (!code) {
+      status.textContent = 'Введите код доступа HRP-...';
+      return;
+    }
+    button.disabled = true;
+    status.textContent = 'Проверка доступа…';
+    try {
+      const res = await fetch(`${runtime.base}/access/check`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${code}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      status.textContent = `Доступ подтверждён: ${data.user || 'пользователь'}`;
+    } catch (err) {
+      status.textContent = `Доступ не подтверждён: ${err.message || err}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  apiField.append(button, status);
+}
+
 async function applyRuntimeUi() {
   const runtime = await getApiRuntime();
   const apiInput = document.getElementById('apiKey');
@@ -30,6 +72,7 @@ async function applyRuntimeUi() {
     if (openAiField) openAiField.style.display = 'none';
     if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск или исследование и получите AI-анализ собранных материалов.';
     if (banner) banner.innerHTML = 'Защищённый режим: запросы идут через managed gateway. OpenAI и Firecrawl API keys хранятся только на сервере.';
+    installAccessCheck(runtime, apiField, apiInput);
   }
 }
 
