@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Поиск и парсинг</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-brand">Поиск · парсинг</div>
+  <div class="topbar-meta">
+    <span id="serverStatus"><span class="dot"></span>Сервер…</span>
+    <span id="creditCounter" class="hint" style="margin:0">≈ 0 кред.</span>
+  </div>
+</header>
+
+<div class="banner">
+  <div class="banner-inner" id="serverBanner">
+    Запустите локальный прокси: <code>python server.py</code> и откройте
+    <a href="http://127.0.0.1:8765/">http://127.0.0.1:8765/</a>.
+    API-ключ — в поле ниже или в переменной <code>FIRECRAWL_API_KEY</code>.
+  </div>
+</div>
+
+<section class="hero">
+  <h1>Поиск информации в интернете и парсинг страниц</h1>
+  <p class="hero-lead" id="heroLead">Введите API-ключ, выполните поиск или парсинг URL и сохраните результат в Excel. <span style="opacity:.85">Наведите курсор на любое поле или кнопку — появится подсказка.</span></p>
+</section>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="search" data-tip="Поиск страниц в Google по ключевым словам">🔍 Поиск</button>
+  <button class="tab-btn" data-tab="research" data-tip="Длинное задание → много коротких поисков">📋 Исследование</button>
+  <button class="tab-btn tab-hidden" id="tabAiBtn" data-tab="ai" data-tip="ИИ проанализирует собранные материалы и даст рекомендации">🤖 Анализ и предложения ИИ</button>
+  <button class="tab-btn" data-tab="crawl" data-tip="Обход всего каталога сайта по ссылкам">🕸 Обход каталога</button>
+  <button class="tab-btn" data-tab="scrape" data-tip="Скачать текст одной конкретной страницы">📄 Парсинг URL</button>
+</nav>
+
+<div class="wrap">
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-head">API-ключ</div>
+        <div class="card-body">
+          <form id="apiKeysForm" autocomplete="off" onsubmit="return false">
+          <div class="field">
+            <label data-tip="Ключ доступа к API. Без него запросы не отправятся. Сохраняется только у вас в браузере.">Ключ (fc-…)</label>
+            <input id="apiKey" type="password" placeholder="fc-xxxxxxxx" autocomplete="off" data-tip="Вставьте полученный API-ключ (fc-…)">
+            <p class="hint">Используйте полученный API-ключ. Постоянное сохранение отключено.</p>
+            <div class="checks" style="margin-top:.5rem">
+              <label data-tip="Ключи хранятся в sessionStorage только до закрытия вкладки."><input type="checkbox" id="rememberKeys"> Запомнить ключи в этой вкладке</label>
+            </div>
+          </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel active" id="panel-search">
+        <div class="card" style="margin-top:1rem">
+          <div class="card-head">Параметры поиска</div>
+          <div class="card-body">
+            <div class="field">
+              <label data-tip="Ищет страницы в интернете, как Google. Только ключевые слова, до 500 символов.">Запрос</label>
+              <textarea id="searchQuery" rows="3" placeholder="Короткий запрос, до 500 символов. Например: программа трудоустройства ветеранов СВО" data-tip="Пример: «автономера купить Москва». Не пишите инструкции — для них вкладка «Исследование»."></textarea>
+              <p class="hint">Это веб-поиск по ключевым словам, не анализ текста. Длинные инструкции и таблицы сюда не подходят — используйте 5–15 слов.</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label data-tip="Сколько ссылок вернуть из поиска (макс. 100).">Кол-во результатов</label>
+                <select id="searchLimit" data-tip="Больше результатов = больше кредитов API.">
+                  <option value="5">5</option>
+                  <option value="10" selected>10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div class="field">
+                <label data-tip="Язык результатов поиска. ru — для русскоязычных сайтов.">Язык / регион</label>
+                <select id="searchLang" data-tip="Влияет на выдачу Google: регион и язык сниппетов.">
+                  <option value="">авто</option>
+                  <option value="ru" selected>ru</option>
+                  <option value="en">en</option>
+                </select>
+              </div>
+            </div>
+            <div class="checks">
+              <label data-tip="Скачает полный текст каждой найденной страницы. Дороже, но можно сразу читать и экспортировать."><input type="checkbox" id="searchScrape" checked> Загрузить полный текст (markdown)</label>
+              <label data-tip="Обычные веб-страницы в результатах поиска."><input type="checkbox" id="srcWeb" checked> Web</label>
+              <label data-tip="Новостные статьи (отдельная лента Google News)."><input type="checkbox" id="srcNews"> News</label>
+            </div>
+            <div class="field">
+              <label data-tip="Ограничить поиск только указанными сайтами.">Только домены (через запятую, опционально)</label>
+              <input id="includeDomains" placeholder="consultant.ru, normativ.kontur.ru" data-tip="Только эти сайты в выдаче. Через запятую или пробел, без https://">
+              <p class="hint">Через запятую или пробел. Без https://</p>
+            </div>
+            <button class="btn-run" id="btnSearch" data-tip="Отправит поиск → результаты появятся справа → экспорт в Excel/MD">▶ Найти и распарсить</button>
+          </div>
+          <div class="loader" id="loader-search"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-research">
+        <div class="card" style="margin-top:1rem">
+          <div class="card-head">Пакетное исследование</div>
+          <div class="card-body">
+            <div class="example-bar">
+              <span class="example-bar-label">Примеры заданий</span>
+              <div class="example-btns">
+                <button type="button" class="btn-sm" id="btnLoadHrTemplate" data-tip="Подставит пример задания, ключевых слов и доменов для HR-исследования">Пример: HR</button>
+                <button type="button" class="btn-sm" id="btnLoadSvoTemplate" data-tip="Подставит пример про практики трудоустройства ветеранов СВО">Пример: ветераны СВО</button>
+              </div>
+            </div>
+            <p class="hint" style="margin-bottom:.75rem">Поиск идёт по списку «Ключевые слова», а не по тексту задания целиком. Перед запуском нажмите «Сформировать запросы» или заполните ключевые слова вручную. Задание целиком использует AI-анализ.</p>
+            <div class="field">
+              <label data-tip="Полный текст задания. Из него автоматически извлекутся ключевые слова в «кавычках».">Техническое задание</label>
+              <textarea id="researchBrief" class="tall" rows="12" placeholder="Опишите цель исследования, тему, период, нужные разделы отчёта, ключевые слова в «кавычках»…" data-tip="Любая тема: HR, рынок, технологии, право и т.д. AI-анализ тоже строится из этого текста."></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label data-tip="Сколько ссылок собирать за один ключевой запрос.">Результатов на запрос</label>
+                <select id="researchLimit" data-tip="Например: 20 × 15 запросов = до 300 ссылок (с дедupliкацией).">
+                  <option value="10">10</option>
+                  <option value="20" selected>20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div class="field">
+                <label data-tip="0 = использовать все строки из списка ниже.">Макс. ключевых слов (0 = все)</label>
+                <input type="number" id="researchMaxQueries" value="0" min="0" max="500" step="1" data-tip="Раньше по умолчанию было 15 — теперь 0 означает «все из списка».">
+              </div>
+            </div>
+            <div class="field">
+              <label data-tip="По одной фразе на строку. Можно через запятую или точку с запятой в одной строке.">Ключевые слова (по одному на строку)</label>
+              <textarea id="researchKeywords" rows="8" placeholder="ключевое слово 1&#10;ключевое слово 2&#10;… или: слово1, слово2, слово3" data-tip="При запуске используется этот список как есть. Кнопка «Из задания» — только по запросу."></textarea>
+              <p class="hint" id="researchKeywordCount">В списке: 0 ключевых слов</p>
+              <button type="button" class="btn-sm" id="btnParseBriefFields" style="margin-top:.4rem" data-tip="Соберёт поисковые фразы из текста задания (город, комнаты, цена, тема)">↻ Сформировать запросы</button>
+            </div>
+            <div class="checks research-scrape-row" id="researchScrapeRow">
+              <label data-tip="Без этой галочки в результатах будут только ссылки и сниппеты. Включение тратит больше кредитов Firecrawl.">
+                <input type="checkbox" id="researchScrape">
+                <strong>Загрузить markdown</strong> (полный текст страниц, медленнее)
+              </label>
+            </div>
+            <div class="field">
+              <label data-tip="Искать только на этих сайтах (опционально).">Домены (через пробел или запятую)</label>
+              <textarea id="researchDomains" rows="3" placeholder="site1.ru site2.ru …" data-tip="Любые домены по теме исследования. Через пробел или запятую, без https://"></textarea>
+            </div>
+            <div class="checks">
+              <div class="date-filter" data-tip="Искать только материалы, опубликованные не раньше выбранной даты (до сегодня).">
+                <label><input type="checkbox" id="researchDateFilter" checked> Публикации с</label>
+                <input type="date" id="researchDateFrom" value="2023-01-01" max="">
+              </div>
+              <label data-tip="Если включено при указанных доменах — добавляет второй проход по всему интернету (результаты с других сайтов)."><input type="checkbox" id="researchBroad"> Доп. поиск без фильтра доменов</label>
+            </div>
+            <button class="btn-run" id="btnResearch" data-tip="Запустит серию поисков → объединит ссылки → покажет справа">▶ Запустить исследование</button>
+          </div>
+          <div class="progress-line" id="researchProgress"></div>
+          <div class="loader" id="loader-research"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-ai">
+        <div class="card" style="margin-top:1rem">
+          <div class="card-head">Анализ и предложения ИИ</div>
+          <div class="card-body">
+            <p class="hint" style="margin-bottom:.75rem">Доступно после исследования. Промпт собирается из вашего «Технического задания» + собранных материалов — каждый запуск уникален по содержанию.</p>
+            <div class="field">
+              <label data-tip="Ключ OpenAI для GPT-4o-mini. Нужен только для AI-анализа.">Ключ OpenAI (sk-…)</label>
+              <form id="openaiKeyForm" autocomplete="off" onsubmit="return false">
+              <input id="openaiKey" type="password" placeholder="sk-xxxxxxxx" autocomplete="off" data-tip="Получить: platform.openai.com → API keys. Или задайте OPENAI_API_KEY в server.py">
+              </form>
+            </div>
+            <div class="field">
+              <label data-tip="Что именно должен проанализировать ИИ. По умолчанию — из поля «Техническое задание».">Фокус анализа (опционально)</label>
+              <textarea id="aiFocus" rows="4" placeholder="Дополнительные акценты: на что обратить внимание, формат ответа, целевая аудитория отчёта…" data-tip="Необязательно. Если пусто — ИИ ориентируется только на «Техническое задание»."></textarea>
+            </div>
+            <div class="checks">
+              <label data-tip="Включить фрагменты markdown из найденных страниц (точнее, но дольше)."><input type="checkbox" id="aiUseMarkdown" checked> Использовать тексты страниц</label>
+            </div>
+            <button class="btn-run" id="btnAiAnalyze" data-tip="Отправит материалы в GPT-4o-mini → отчёт появится справа">▶ Провести AI-анализ</button>
+            <button type="button" class="btn-sm" id="btnAiCopyPrompt" style="margin-top:.5rem;width:100%" data-tip="Если нет ключа OpenAI — скопирует промпт и данные для ChatGPT">Скопировать промпт для ChatGPT</button>
+          </div>
+          <div class="progress-line" id="aiProgress"></div>
+          <div class="loader" id="loader-ai"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-crawl">
+        <div class="card" style="margin-top:1rem">
+          <div class="card-head">Обход каталога сайта</div>
+          <div class="card-body">
+            <p class="hint" style="margin-bottom:.75rem">Обходит страницы сайта по ссылкам. Подходит для каталогов объявлений, номеров, товаров. 1 страница ≈ 1 кредит.</p>
+            <div class="example-bar">
+              <span class="example-bar-label">Примеры</span>
+              <div class="example-btns">
+                <button type="button" class="btn-sm" id="btnCrawlPresetAuto" data-tip="Заполнит URL и настройки для сайта auto-nomera.ru">Пример: auto-nomera.ru</button>
+              </div>
+            </div>
+            <div class="field">
+              <label data-tip="С какой страницы начать обход — обычно главная или каталог.">URL каталога</label>
+              <input id="crawlUrl" type="url" placeholder="https://auto-nomera.ru/" data-tip="Обход пойдёт по ссылкам с этой страницы. Для номеров: auto-nomera.ru">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label data-tip="Сколько страниц максимум скачать. 1 страница = 1 кредит.">Макс. страниц</label>
+                <select id="crawlLimit" data-tip="Начните с 25–50. Для полного каталога — 100–200.">
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50" selected>50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                  <option value="500">500</option>
+                </select>
+              </div>
+              <div class="field">
+                <label data-tip="Сколько «кликов» от стартовой страницы идти по ссылкам.">Глубина ссылок</label>
+                <select id="crawlDepth" data-tip="Больше глубина — больше страниц найдётся, но дольше обход.">
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="5">5</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label data-tip="Regex-пути URL, которые нужно обойти. Пусто = все страницы.">Включить только пути (regex, по одному на строку, опционально)</label>
+              <textarea id="crawlIncludePaths" rows="2" placeholder="^/sale/.*&#10;^/auto/.*" data-tip="Пример: ^/auto/.* — только страницы каталога авто"></textarea>
+            </div>
+            <div class="field">
+              <label data-tip="Regex-пути, которые пропустить (логин, админка и т.д.).">Исключить пути (regex, опционально)</label>
+              <textarea id="crawlExcludePaths" rows="2" placeholder="^/admin/.*&#10;^/login.*" data-tip="Пример: ^/login.* — не заходить на страницу входа"></textarea>
+            </div>
+            <div class="checks">
+              <label data-tip="Обходить весь сайт, а не только ссылки ниже стартовой страницы."><input type="checkbox" id="crawlEntireDomain" checked> Весь домен (не только подпапки)</label>
+              <label data-tip="Сохранить текст каждой страницы — нужно для MD и Excel."><input type="checkbox" id="crawlScrape" checked> Markdown каждой страницы</label>
+              <label data-tip="Найдёт госномера в тексте и вынесет на отдельный лист Excel «Номера»."><input type="checkbox" id="crawlExtractPlates" checked> Извлекать госномера в Excel</label>
+            </div>
+            <button class="btn-run" id="btnCrawl" data-tip="Запустит обход → подождите 1–10 мин → номера в Excel на листе «Номера»">▶ Обойти каталог</button>
+          </div>
+          <div class="progress-line" id="crawlProgress"></div>
+          <div class="loader" id="loader-crawl"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-scrape">
+        <div class="card" style="margin-top:1rem">
+          <div class="card-head">Парсинг одной страницы</div>
+          <div class="card-body">
+            <div class="field">
+              <label data-tip="Полный адрес одной страницы для скачивания.">URL</label>
+              <input id="scrapeUrl" type="url" placeholder="https://example.com/page" data-tip="Одна ссылка = одна страница. Для всего каталога — вкладка «Обход каталога».">
+            </div>
+            <div class="field" id="scrapeEngineField">
+              <label data-tip="Firecrawl — облако (нужен ключ). curl_cffi — локально, обход TLS. Браузер — JS/Cloudflare (CloakBrowser/Playwright).">Движок</label>
+              <select id="scrapeEngine" data-tip="Локальные движки работают только через python server.py">
+                <option value="auto" selected>Авто (Firecrawl → curl_cffi → браузер)</option>
+                <option value="firecrawl">Firecrawl (облако, кредиты)</option>
+                <option value="curl_cffi">curl_cffi (локально, TLS)</option>
+                <option value="browser">Браузер CloakBrowser / Playwright</option>
+              </select>
+              <p class="hint" id="scrapeEngineHint">На GitHub Pages доступен только Firecrawl. Локальные движки — при запуске server.py.</p>
+            </div>
+            <div class="checks">
+              <label data-tip="Чистый текст страницы — удобно читать и экспортировать."><input type="checkbox" id="fmtMarkdown" checked> Markdown</label>
+              <label data-tip="Список всех ссылок со страницы."><input type="checkbox" id="fmtLinks"> Ссылки</label>
+              <label data-tip="Исходный HTML-код страницы."><input type="checkbox" id="fmtHtml"> HTML</label>
+            </div>
+            <button class="btn-run" id="btnScrape" data-tip="Скачает одну страницу → результат справа → Excel или MD">▶ Распарсить страницу</button>
+          </div>
+          <div class="loader" id="loader-scrape"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="resultsCard">
+      <div class="placeholder" id="placeholder">
+        <span style="font-size:2rem;opacity:.3">🔥</span>
+        <p>Результаты поиска или парсинга появятся здесь</p>
+      </div>
+      <div id="resultsArea" style="display:none">
+        <div class="result-head">
+          <span class="result-title" id="resultsTitle">Результаты</span>
+          <div class="result-actions">
+            <button class="btn-sm" id="btnCopyJson" data-tip="Скопирует все результаты в буфер обмена в формате JSON">JSON</button>
+            <button class="btn-sm" id="btnCopyMd" data-tip="Скачает один .md файл со всеми страницами">Скачать MD</button>
+            <button class="btn-sm" id="btnExportExcel" data-tip="Сохранит таблицу .xlsx (для обхода — лист «Номера»)">Excel</button>
+          </div>
+        </div>
+        <p class="export-hint">Скачать MD — файл с текстом · JSON — копия в буфер · Excel — таблица с номерами</p>
+        <div class="kpi-row" id="kpiRow"></div>
+        <div class="error-box" id="errorBox"></div>
+        <div class="results-list" id="resultsList"></div>
+        <div class="ai-report" id="aiResultsArea" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script type="module" src="static/js/app.js"></script>
+</body>
+</html>
