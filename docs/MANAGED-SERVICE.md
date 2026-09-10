@@ -1,6 +1,6 @@
 # HR Помощник: managed access
 
-В production пользователь вводит один код доступа вида `HRP-...`. Ключи OpenAI и Firecrawl хранятся только на backend и не попадают в браузер, GitHub Pages, исходный код или установочные файлы.
+В production пользователь вводит один персональный код вида `HRP-...`. Ключи OpenAI и Firecrawl хранятся только на backend и не попадают в браузер, GitHub Pages или исходный код.
 
 ## Схема
 
@@ -23,30 +23,62 @@ FIRECRAWL_API_KEY=<серверный Firecrawl key>
 OPENAI_API_KEY=<серверный OpenAI key>
 OPENAI_MODEL=gpt-5.6-sol
 OPENAI_REASONING_EFFORT=none
-MANAGED_ACCESS_CODE_HASHES=<sha256-1>,<sha256-2>,...
+MANAGED_ACCESS_USERS_JSON=[{"user":"ivan.petrov","hash":"<sha256>","enabled":true}]
 CORS_ORIGINS=https://aleksey341.github.io
 ```
 
-Реальные значения секретов не добавляются в репозиторий.
+`MANAGED_ACCESS_CODE_HASHES` оставлен только для совместимости со старой схемой. Для новых пользователей используется `MANAGED_ACCESS_USERS_JSON`.
 
-## Выдача пользовательского кода
+## Управление пользователями
 
-На администраторском компьютере:
+Локальный реестр `access-users.json` включён в `.gitignore`. Он хранит имя пользователя, SHA-256 кода и статус. Сам открытый `HRP-...` после генерации в реестр не записывается.
+
+### Добавить пользователя
 
 ```powershell
-python scripts/make_access_code.py
+python scripts/access_users.py add ivan.petrov
 ```
 
-Скрипт выдаёт:
+Команда один раз покажет:
 
 ```text
+USER=ivan.petrov
 ACCESS_CODE=HRP-...
-SHA256=...
 ```
 
-Пользователю передаётся только `ACCESS_CODE`. На сервере в `MANAGED_ACCESS_CODE_HASHES` сохраняется только `SHA256`.
+Передайте пользователю только `ACCESS_CODE`.
 
-Чтобы отключить пользователя, удалите соответствующий hash из `MANAGED_ACCESS_CODE_HASHES` и выполните redeploy backend.
+### Посмотреть пользователей
+
+```powershell
+python scripts/access_users.py list
+```
+
+### Отключить пользователя
+
+```powershell
+python scripts/access_users.py disable ivan.petrov
+```
+
+### Включить обратно
+
+```powershell
+python scripts/access_users.py enable ivan.petrov
+```
+
+### Получить значение для Vercel
+
+```powershell
+python scripts/access_users.py export
+```
+
+Результат целиком записывается в Environment Variable `MANAGED_ACCESS_USERS_JSON`, затем выполняется redeploy.
+
+Для разовой генерации без локального реестра также доступно:
+
+```powershell
+python scripts/make_access_code.py --user ivan.petrov
+```
 
 ## Backend endpoints
 
@@ -59,18 +91,22 @@ SHA256=...
 
 Все рабочие endpoints, кроме health, требуют `Authorization: Bearer HRP-...`.
 
+`/api/health` показывает только безопасный статус конфигурации: настроены ли OpenAI, Firecrawl и сколько именованных пользователей активно. Секреты и хэши endpoint не возвращает.
+
 ## Включение managed mode
 
-После развёртывания backend измените `service.json`:
+После развёртывания backend измените `service.json`.
+
+Если frontend размещён на GitHub Pages, укажите абсолютный адрес backend:
 
 ```json
 {
   "mode": "managed",
-  "managed_base_url": "https://<ваш-домен>/api"
+  "managed_base_url": "https://<ваш-vercel-домен>/api"
 }
 ```
 
-Если frontend и backend размещены в одном Vercel-проекте, можно использовать:
+Если frontend и backend находятся в одном Vercel-проекте:
 
 ```json
 {
@@ -79,12 +115,13 @@ SHA256=...
 }
 ```
 
-После этого интерфейс автоматически заменит поле Firecrawl key на поле `Код доступа HR Помощник`, а отдельное поле OpenAI key скроется.
+После переключения интерфейс показывает поле `Код доступа HR Помощник`, а отдельное поле OpenAI key скрывается.
 
 ## Безопасность
 
 - API keys не передаются пользователям.
-- Пользовательские коды не хранятся на сервере в открытом виде.
-- В браузере код можно сохранить только в `sessionStorage`, то есть до закрытия вкладки.
-- CORS ограничивается списком разрешённых Origin.
-- Следующая версия механизма доступа может вынести коды из переменной окружения в БД, чтобы добавлять и отзывать пользователей без redeploy.
+- Пользовательские коды на backend проверяются только по SHA-256.
+- Именованный пользователь может быть отключён отдельно от остальных.
+- В браузере код может сохраняться только в `sessionStorage`, до закрытия вкладки.
+- CORS ограничивается разрешёнными Origin.
+- `access-users.json`, `.env` и реальные секреты исключены из Git.
