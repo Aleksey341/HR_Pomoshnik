@@ -1,4 +1,4 @@
-const KEY_FIRECRAWL = 'firecrawl_api_key';
+const KEY_ACCESS = 'hr_pomoshnik_access_code';
 const KEY_OPENAI = 'openai_api_key';
 
 function rememberEnabled() {
@@ -15,20 +15,20 @@ export function getOpenAiKey() {
 
 export function loadApiKey() {
   if (!rememberEnabled()) return;
-  const key = sessionStorage.getItem(KEY_FIRECRAWL);
+  const key = sessionStorage.getItem(KEY_ACCESS);
   if (key) document.getElementById('apiKey').value = key;
 }
 
 export function loadOpenAiKey() {
   if (!rememberEnabled()) return;
   const key = sessionStorage.getItem(KEY_OPENAI);
-  if (key) document.getElementById('openaiKey').value = key;
+  if (key && document.getElementById('openaiKey')) document.getElementById('openaiKey').value = key;
 }
 
 export function persistApiKey() {
   const key = getApiKey();
-  if (rememberEnabled() && key) sessionStorage.setItem(KEY_FIRECRAWL, key);
-  else sessionStorage.removeItem(KEY_FIRECRAWL);
+  if (rememberEnabled() && key) sessionStorage.setItem(KEY_ACCESS, key);
+  else sessionStorage.removeItem(KEY_ACCESS);
 }
 
 export function persistOpenAiKey() {
