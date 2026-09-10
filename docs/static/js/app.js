@@ -77,6 +77,9 @@ async function applyRuntimeUi() {
   const accessCardHead = apiField?.closest('.card')?.querySelector('.card-head');
   const rememberLabel = document.getElementById('rememberKeys')?.closest('label');
   const openAiField = document.getElementById('openaiKey')?.closest('.field');
+  const aiPanelHint = document.querySelector('#panel-ai .card-body > .hint');
+  const aiButton = document.getElementById('btnAiAnalyze');
+  const aiCopyButton = document.getElementById('btnAiCopyPrompt');
   const heroLead = document.getElementById('heroLead');
   const banner = document.getElementById('serverBanner');
   const brand = document.querySelector('.topbar-brand');
@@ -100,7 +103,10 @@ async function applyRuntimeUi() {
       if (checkbox) rememberLabel.append(checkbox, document.createTextNode(' Запомнить код доступа в этой вкладке'));
     }
     if (openAiField) openAiField.style.display = 'none';
-    if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск или исследование и получите AI-анализ собранных материалов.';
+    if (aiPanelHint) aiPanelHint.textContent = 'AI-анализ доступен после поиска, исследования или парсинга URL, если собран хотя бы один материал. OpenAI API-ключ хранится только на сервере.';
+    if (aiButton) aiButton.setAttribute('data-tip', 'Отправит собранные материалы в OpenAI через защищённый сервер и покажет отчёт справа');
+    if (aiCopyButton) aiCopyButton.setAttribute('data-tip', 'Скопирует сформированный промпт и собранные материалы для использования в ChatGPT');
+    if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск, исследование или парсинг и получите AI-анализ собранных материалов.';
     if (banner) banner.textContent = 'Защищённый режим: используйте персональный код HRP. OpenAI и Firecrawl API-ключи хранятся только на сервере.';
     installAccessCheck(runtime, apiField, apiInput);
     installAiNavigation();
