@@ -1,79 +1,118 @@
-# Firecrawl Parser
+# HR Помощник
 
-Инструмент для **поиска в интернете**, **пакетного исследования**, **обхода каталогов** и **AI-анализа** собранных материалов.
+Веб-инструмент для HR-исследований: поиск информации в интернете, пакетный сбор источников, парсинг страниц, экспорт материалов и AI-анализ результатов.
 
-## Онлайн (GitHub Pages)
+Проект перенесён из Parser в отдельный репозиторий и развивается как самостоятельный продукт.
 
-**https://aleksey341.github.io/Parser/**
+## Основные возможности
 
-1. Введите полученный API-ключ.
-2. Вкладка **«Исследование»** → сформируйте запросы → запустите сбор.
-3. Экспорт в **Excel** / **Markdown**, затем **AI-анализ**.
+- веб-поиск и сбор источников;
+- пакетные исследования по техническому заданию;
+- загрузка полного текста страниц;
+- обход каталогов и сайтов;
+- экспорт результатов в Excel и Markdown;
+- AI-анализ собранных материалов;
+- локальный режим с Flask;
+- managed access для пользователей по персональному коду `HRP-...`.
 
-> Python не нужен — работает в браузере. Ключи по умолчанию **не сохраняются** в `localStorage`.
+## Managed access
 
-> Корневые `index.html` / `firecrawl_parser.html` — только редирект на `docs/`. Рабочий UI: Pages или `python server.py`.
+Архитектура сделана по модели 1С Аналитик.
 
----
+В production пользователь вводит только персональный код доступа. Настоящие `OPENAI_API_KEY` и `FIRECRAWL_API_KEY` находятся на backend и не передаются в браузер.
+
+```text
+Пользователь -> HRP-код -> HR Помощник gateway -> OpenAI / Firecrawl
+```
+
+Для выдачи кода:
+
+```powershell
+python scripts/make_access_code.py
+```
+
+Пользователь получает `ACCESS_CODE`. На сервере сохраняется только его SHA-256 hash в `MANAGED_ACCESS_CODE_HASHES`.
+
+Подробно: [docs/MANAGED-SERVICE.md](docs/MANAGED-SERVICE.md).
+
+## Текущий режим
+
+`service.json` пока установлен в `direct`. Это сохраняет работоспособность текущего браузерного варианта до подключения production backend и серверных секретов.
+
+После deployment backend достаточно переключить:
+
+```json
+{
+  "mode": "managed",
+  "managed_base_url": "https://<ваш-домен>/api"
+}
+```
+
+При размещении frontend и API в одном Vercel-проекте можно использовать `/api`.
+
+## Vercel
+
+Репозиторий подготовлен для Vercel:
+
+- `api/ai/analyze.js` - OpenAI gateway;
+- `api/firecrawl/*` - Firecrawl gateway;
+- `api/health.js` - проверка конфигурации;
+- `vercel.json` - маршрутизация frontend;
+- `package.json` - Node runtime.
+
+В Environment Variables production-проекта задаются:
+
+```text
+OPENAI_API_KEY
+FIRECRAWL_API_KEY
+OPENAI_MODEL=gpt-5.6-sol
+OPENAI_REASONING_EFFORT=none
+MANAGED_ACCESS_CODE_HASHES
+CORS_ORIGINS
+```
+
+Реальные ключи нельзя коммитить в GitHub.
 
 ## Локальный запуск
 
-```bash
+```powershell
 pip install -r requirements.txt
 python -m playwright install chromium
-# опционально: скопируйте .env.example → .env и задайте ключи
+copy .env.example .env
 python server.py
 ```
 
-Откройте: http://127.0.0.1:8765/
+Откройте `http://127.0.0.1:8765/`.
 
-Переменные окружения — см. [`.env.example`](.env.example).
+В локальном режиме можно использовать собственные Firecrawl/OpenAI keys из `.env`.
 
-### Локальные движки парсинга (вкладка «Парсинг URL»)
+## Сборка статической версии
 
-| Движок | Когда использовать |
-| --- | --- |
-| **Firecrawl** | Поиск, crawl, облачный scrape (нужен ключ) |
-| **curl_cffi** | Быстрый локальный scrape с TLS-fingerprint Chrome, без кредитов |
-| **Браузер** | JS / antibot: CloakBrowser, иначе Playwright |
-
-AgentReach в продукт не встроен — это отдельный CLI для агента (соцсети, YouTube и т.д.).
-
----
-
-## Сборка GitHub Pages
-
-```bash
+```powershell
 python scripts/build_static.py
 ```
 
-Публикуется содержимое папки `docs/` (генерируется из `templates/` + `static/`).
+Скрипт формирует `docs/` из `templates/` и `static/`, а также копирует `service.json`.
 
----
+## Структура
 
-## Структура проекта
-
-```
-Parser/
-├── app/                 # Flask-приложение, валидация, клиенты API
-├── static/js/           # ESM-модули (api, ai, crawl, research, …)
-├── templates/           # Единый HTML-шаблон
+```text
+HR_Pomoshnik/
+├── api/                 # managed gateway для OpenAI и Firecrawl
+├── app/                 # локальное Flask-приложение
+├── static/              # клиентский JavaScript/CSS
+├── templates/           # HTML-шаблон
+├── docs/                # статическая сборка
+├── scripts/             # сборка и генерация HRP-кодов
 ├── tests/               # pytest
-├── scripts/build_static.py
-├── docs/                # GitHub Pages (генерируется)
+├── service.json         # direct/managed runtime mode
+├── vercel.json
 ├── server.py
-├── .env.example
 └── README.md
 ```
 
----
-
 ## Безопасность
 
-См. [SECURITY.md](SECURITY.md).
+Секреты исключаются из Git. Пользовательские коды в managed mode проверяются по SHA-256. CORS ограничивается разрешёнными Origin. Код, введённый пользователем, может сохраняться только в `sessionStorage` до закрытия вкладки.
 
----
-
-## Лицензия
-
-MIT
+См. [SECURITY.md](SECURITY.md) и [docs/MANAGED-SERVICE.md](docs/MANAGED-SERVICE.md).
