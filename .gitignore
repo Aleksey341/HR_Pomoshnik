@@ -1,4 +1,5 @@
 .env
+.env.*
 .venv/
 venv/
 __pycache__/
@@ -7,5 +8,6 @@ __pycache__/
 .mypy_cache/
 logs/
 *.log
+access-users.json
 .DS_Store
 Thumbs.db
