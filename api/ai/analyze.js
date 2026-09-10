@@ -17,10 +17,10 @@ export default async function handler(req, res) {
   const messages = Array.isArray(incoming.messages) ? incoming.messages : [];
   if (!messages.length) return res.status(400).json({ error: "Нет messages для анализа" });
 
-  const requestedMax = Number(incoming.max_completion_tokens || 2200);
+  const requestedMax = Number(incoming.max_completion_tokens || 4500);
   const maxCompletionTokens = Number.isFinite(requestedMax)
-    ? Math.max(128, Math.min(Math.trunc(requestedMax), 3000))
-    : 2200;
+    ? Math.max(128, Math.min(Math.trunc(requestedMax), 6000))
+    : 4500;
 
   const payload = {
     model: process.env.OPENAI_MODEL || "gpt-5.6-sol",
