@@ -82,14 +82,17 @@ python scripts/make_access_code.py --user ivan.petrov
 
 ## Backend endpoints
 
-- `POST /api/firecrawl/search`
-- `POST /api/firecrawl/scrape`
-- `POST /api/firecrawl/crawl`
-- `GET /api/firecrawl/get`
-- `POST /api/ai/analyze`
-- `GET /api/health`
+- `GET /api/access/check` - бесплатная проверка пользовательского кода;
+- `POST /api/firecrawl/search`;
+- `POST /api/firecrawl/scrape`;
+- `POST /api/firecrawl/crawl`;
+- `GET /api/firecrawl/get`;
+- `POST /api/ai/analyze`;
+- `GET /api/health`.
 
 Все рабочие endpoints, кроме health, требуют `Authorization: Bearer HRP-...`.
+
+`/api/access/check` возвращает подтверждение доступа и имя пользователя из реестра. Интерфейс использует этот endpoint для кнопки `Проверить доступ`, поэтому для проверки кода не расходуются кредиты Firecrawl и OpenAI.
 
 `/api/health` показывает только безопасный статус конфигурации: настроены ли OpenAI, Firecrawl и сколько именованных пользователей активно. Секреты и хэши endpoint не возвращает.
 
@@ -115,7 +118,7 @@ python scripts/make_access_code.py --user ivan.petrov
 }
 ```
 
-После переключения интерфейс показывает поле `Код доступа HR Помощник`, а отдельное поле OpenAI key скрывается.
+После переключения интерфейс показывает поле `Код доступа HR Помощник`, кнопку `Проверить доступ`, а отдельное поле OpenAI key скрывается.
 
 ## Безопасность
 
@@ -125,3 +128,4 @@ python scripts/make_access_code.py --user ivan.petrov
 - В браузере код может сохраняться только в `sessionStorage`, до закрытия вкладки.
 - CORS ограничивается разрешёнными Origin.
 - `access-users.json`, `.env` и реальные секреты исключены из Git.
+- CI проверяет синтаксис gateway, тестирует named access и отклоняет коммиты с похожими на реальные `sk-...`/`fc-...` секретами.
