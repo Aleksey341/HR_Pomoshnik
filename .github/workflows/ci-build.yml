@@ -45,6 +45,12 @@ jobs:
           node --check static/js/api.js
           node --check static/js/ai.js
           node --check static/js/app.js
+          node --check static/js/results.js
+          node --check static/js/export.js
+          node --check static/js/legacy.js
+          node --check static/js/markdown.js
+          node --check static/js/history.js
+          node --check static/js/research-planner.js
 
       - name: Run managed access tests
         run: node --test tests/managed-access.test.mjs
