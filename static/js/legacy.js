@@ -15,6 +15,7 @@ import {
   parseBriefFields,
   doResearch
 } from './research.js';
+import { installResearchPlannerButton } from './research-planner.js';
 import { updateResultsViewForTab } from './results.js';
 import { loadOpenAiKey, saveApiKey, saveOpenAiKey } from './storage.js';
 import { showToast } from './ui.js';
@@ -45,9 +46,7 @@ document.getElementById('btnLoadSvoTemplate').addEventListener('click', () => lo
 document.getElementById('btnParseBriefFields').addEventListener('click', () => {
   const { keywords, domains } = parseBriefFields(true);
   if (!keywords.length && !domains.length) {
-    alert(
-      'Не удалось собрать запросы из задания. Добавьте ключевые слова вручную (фразы из 2+ слов).'
-    );
+    alert('Не удалось собрать запросы из задания. Добавьте ключевые слова вручную (фразы из 2+ слов).');
   } else if (keywords.length) {
     showToast(`Сформировано ${keywords.length} поисковых запросов`);
   }
@@ -70,8 +69,7 @@ async function checkServer() {
       await res.json();
       status.innerHTML = '<span class="dot ok"></span>Локальный сервер';
       banner.classList.add('ok');
-      banner.innerHTML =
-        'Локальный режим. Ключ — в поле слева или в <code>FIRECRAWL_API_KEY</code>.';
+      banner.innerHTML = 'Локальный режим. Ключ — в поле слева или в <code>FIRECRAWL_API_KEY</code>.';
     } catch {
       status.innerHTML = '<span class="dot"></span>Сервер не найден';
     }
@@ -80,12 +78,12 @@ async function checkServer() {
 
   status.innerHTML = '<span class="dot ok"></span>Онлайн-режим';
   banner.classList.add('ok');
-  banner.innerHTML =
-    'Введите API-ключ слева и нажмите «Найти» или «Распарсить». Экспорт в Excel — кнопкой справа над результатами.';
+  banner.innerHTML = 'Введите API-ключ слева и нажмите «Найти» или «Распарсить». Экспорт в Excel — кнопкой справа над результатами.';
 }
 
 loadOpenAiKey();
 initResearchDatePicker();
 initResearchKeywordCount();
 initScrapeEngineUI();
+installResearchPlannerButton();
 checkServer();
