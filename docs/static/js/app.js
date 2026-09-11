@@ -4,6 +4,15 @@ import { getApiRuntime } from './config.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
 
+function ensureFeatureStyles() {
+  if (document.getElementById('researchSuiteStyles')) return;
+  const link = document.createElement('link');
+  link.id = 'researchSuiteStyles';
+  link.rel = 'stylesheet';
+  link.href = new URL('static/css/research-suite.css', document.baseURI).href;
+  document.head.append(link);
+}
+
 function installAccessCheck(runtime, apiField, apiInput) {
   if (!apiField || !apiInput || document.getElementById('btnCheckAccess')) return;
 
@@ -103,10 +112,10 @@ async function applyRuntimeUi() {
       if (checkbox) rememberLabel.append(checkbox, document.createTextNode(' Запомнить код доступа в этой вкладке'));
     }
     if (openAiField) openAiField.style.display = 'none';
-    if (aiPanelHint) aiPanelHint.textContent = 'AI-анализ доступен после поиска, исследования или парсинга URL, если собран хотя бы один материал. OpenAI API-ключ хранится только на сервере.';
-    if (aiButton) aiButton.setAttribute('data-tip', 'Отправит собранные материалы в OpenAI через защищённый сервер и покажет отчёт справа');
+    if (aiPanelHint) aiPanelHint.textContent = 'AI-анализ доступен после поиска, исследования или парсинга URL. Большие исследования разбиваются на пакеты и анализируются целиком. OpenAI API-ключ хранится только на сервере.';
+    if (aiButton) aiButton.setAttribute('data-tip', 'Проанализирует все собранные источники пакетами и сформирует evidence-отчёт');
     if (aiCopyButton) aiCopyButton.setAttribute('data-tip', 'Скопирует сформированный промпт и собранные материалы для использования в ChatGPT');
-    if (heroLead) heroLead.textContent = 'Введите код доступа, выполните поиск, исследование или парсинг и получите AI-анализ собранных материалов.';
+    if (heroLead) heroLead.textContent = 'Введите код доступа, соберите материалы, постройте AI-план исследования и получите доказательный отчёт со ссылками на источники.';
     if (banner) banner.textContent = 'Защищённый режим: используйте персональный код HRP. OpenAI и Firecrawl API-ключи хранятся только на сервере.';
     installAccessCheck(runtime, apiField, apiInput);
     installAiNavigation();
@@ -118,6 +127,7 @@ async function loadLegacy() {
 }
 
 async function bootstrap() {
+  ensureFeatureStyles();
   initStorage();
 
   try {
