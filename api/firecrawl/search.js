@@ -9,6 +9,7 @@ import {
   sanitizeFirecrawlBody,
   sendProxyResponse,
 } from "../_lib/managed.js";
+import { enforceMonthlyQuota, recordUsage } from "../_lib/usage.js";
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -20,6 +21,16 @@ export default async function handler(req, res) {
   if (!apiKey) return;
   const body = sanitizeFirecrawlBody("search", req.body);
   if (!body.query) return res.status(400).json({ error: "Пустой поисковый запрос" });
+
+  const delta = {
+    search_requests: 1,
+    firecrawl_units: body.scrapeOptions ? body.limit : 1,
+  };
+  if (!(await enforceMonthlyQuota(req, res, delta))) return;
+
   const result = await proxyJson({ url: `${FIRECRAWL_API}/search`, apiKey, body });
+  if (result.status >= 200 && result.status < 300) {
+    await recordUsage(req.hrPomoshnikUser, delta, { kind: "firecrawl-search", status: result.status });
+  }
   return sendProxyResponse(res, result);
 }
