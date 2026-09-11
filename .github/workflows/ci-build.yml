@@ -23,10 +23,18 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Install Node dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
 
       - name: Run Python tests
         run: PYTHONPATH=. python -m pytest -q
@@ -34,12 +42,27 @@ jobs:
       - name: Check managed gateway JavaScript
         run: |
           node --check api/_lib/managed.js
+          node --check api/_lib/blob-store.js
+          node --check api/_lib/usage.js
+          node --check api/_lib/research-store.js
+          node --check api/_lib/monitor-store.js
+          node --check api/_lib/monitor-runner.js
           node --check api/access/check.js
           node --check api/ai/analyze.js
           node --check api/firecrawl/search.js
           node --check api/firecrawl/scrape.js
           node --check api/firecrawl/crawl.js
           node --check api/firecrawl/get.js
+          node --check api/usage/me.js
+          node --check api/research/list.js
+          node --check api/research/get.js
+          node --check api/research/save.js
+          node --check api/research/delete.js
+          node --check api/monitor/list.js
+          node --check api/monitor/save.js
+          node --check api/monitor/delete.js
+          node --check api/monitor/run.js
+          node --check api/cron/monitor.js
           node --check api/health.js
           node --check static/js/config.js
           node --check static/js/api.js
@@ -51,14 +74,24 @@ jobs:
           node --check static/js/markdown.js
           node --check static/js/history.js
           node --check static/js/research-planner.js
+          node --check static/js/usage.js
+          node --check static/js/quality.js
+          node --check static/js/hr-playbooks.js
+          node --check static/js/report-formats.js
+          node --check static/js/monitoring.js
+          node --check static/js/state.js
+          node --check static/js/research.js
 
-      - name: Run managed access tests
-        run: node --test tests/managed-access.test.mjs
+      - name: Verify Node runtime dependencies
+        run: node -e "import('@vercel/blob').then(() => console.log('Vercel Blob SDK resolved'))"
+
+      - name: Run Node tests
+        run: node --test tests/managed-access.test.mjs tests/evidence-quality.test.mjs
 
       - name: Reject committed API secrets
         shell: bash
         run: |
-          if grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='.env.example' \
+          if grep -RInE --exclude-dir=.git --exclude-dir=node_modules --exclude='*.md' --exclude='.env.example' \
             '(sk-[A-Za-z0-9_-]{20,}|fc-[A-Za-z0-9_-]{20,})' .; then
             echo 'Possible API secret committed to repository'
             exit 1
