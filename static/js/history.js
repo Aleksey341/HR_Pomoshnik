@@ -1,11 +1,13 @@
 import { renderAiReport } from './ai.js';
+import { getApiRuntime } from './config.js';
 import { getLastAiReport, getLastPayload } from './state.js';
 import { renderResults } from './results.js';
-import { showToast } from './ui.js';
+import { getApiKey } from './storage.js';
+import { esc, showToast } from './ui.js';
 
 const STORAGE_KEY = 'hr_pomoshnik_research_history_v1';
 const MAX_ENTRIES = 6;
-const MAX_TEXT_PER_SOURCE = 3000;
+const MAX_TEXT_PER_SOURCE = 6000;
 
 function excerpt(value, limit = MAX_TEXT_PER_SOURCE) {
   const text = String(value || '');
@@ -49,42 +51,91 @@ function compactPayload(payload) {
       title: item.title,
       url: item.url,
       sourceURL: item.sourceURL,
-      description: excerpt(item.description || item.snippet, 1000),
-      snippet: excerpt(item.snippet, 1000),
+      description: excerpt(item.description || item.snippet, 1500),
+      snippet: excerpt(item.snippet, 1500),
       searchKeyword: item.searchKeyword,
       markdown: excerpt(item.markdown || item.content),
+      publishedDate: item.publishedDate || item.published_at || item.date,
       links: Array.isArray(item.links) ? item.links.slice(0, 50) : undefined,
     }))
   };
 }
 
-export function saveCurrentResearch() {
-  const payload = getLastPayload();
-  if (!payload?.items?.length) {
-    showToast('Нет исследования для сохранения');
-    return;
-  }
+async function managedContext() {
+  const runtime = await getApiRuntime();
+  const code = getApiKey();
+  return { runtime, code, available: Boolean(runtime.managed && code) };
+}
 
-  const entry = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+async function serverRequest(path, options = {}) {
+  const { runtime, code, available } = await managedContext();
+  if (!available) throw Object.assign(new Error('Managed storage is unavailable'), { localFallback: true });
+  const headers = { ...(options.headers || {}), Authorization: `Bearer ${code}` };
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  const res = await fetch(`${runtime.base}${path}`, { cache: 'no-store', ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.error || `HTTP ${res.status}`);
+    error.code = data.code;
+    error.localFallback = data.code === 'SERVER_STORAGE_UNAVAILABLE';
+    throw error;
+  }
+  return data;
+}
+
+function buildCurrentEntry() {
+  const payload = getLastPayload();
+  if (!payload?.items?.length) return null;
+  return {
     createdAt: new Date().toISOString(),
     title: payload.title || 'Исследование',
     brief: payload.meta?.researchBrief || document.getElementById('researchBrief')?.value?.trim() || '',
     payload: compactPayload(payload),
-    aiReport: excerpt(getLastAiReport(), 80_000),
+    aiReport: excerpt(getLastAiReport(), 180_000),
   };
+}
 
-  const entries = loadEntries().filter((item) => item.id !== entry.id);
-  const saved = writeEntries([entry, ...entries]);
-  if (saved.some((item) => item.id === entry.id)) {
-    showToast('Исследование сохранено локально в этом браузере');
-    renderHistoryList();
+function saveLocal(entry) {
+  const localEntry = {
+    ...entry,
+    id: entry.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  };
+  const entries = loadEntries().filter((item) => item.id !== localEntry.id);
+  const saved = writeEntries([localEntry, ...entries]);
+  return saved.some((item) => item.id === localEntry.id);
+}
+
+export async function saveCurrentResearch() {
+  const entry = buildCurrentEntry();
+  if (!entry) {
+    showToast('Нет исследования для сохранения');
+    return;
+  }
+
+  try {
+    const data = await serverRequest('/research/save', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    });
+    showToast(`Исследование сохранено на сервере: ${data.item?.sourceCount || entry.payload.items.length} источников`);
+    await renderHistoryList();
+    return;
+  } catch (error) {
+    if (!error.localFallback) {
+      showToast(`Серверное сохранение не выполнено: ${error.message}`);
+      return;
+    }
+  }
+
+  if (saveLocal(entry)) {
+    showToast('Серверное хранилище не подключено - сохранено только в этом браузере');
+    await renderHistoryList();
   } else {
-    showToast('Не удалось сохранить: хранилище браузера заполнено');
+    showToast('Не удалось сохранить: локальное хранилище заполнено');
   }
 }
 
-function openEntry(entry) {
+function restoreEntry(entry, locationLabel) {
   if (!entry?.payload?.items?.length) return;
   const brief = document.getElementById('researchBrief');
   if (brief && entry.brief) brief.value = entry.brief;
@@ -94,19 +145,36 @@ function openEntry(entry) {
     document.getElementById('tabAiBtn')?.click();
   }
   closeHistory();
-  showToast('Исследование восстановлено из локальной истории');
+  showToast(`Исследование восстановлено: ${locationLabel}`);
 }
 
-function deleteEntry(id) {
+async function openServerEntry(id) {
+  try {
+    const data = await serverRequest(`/research/get?id=${encodeURIComponent(id)}`);
+    restoreEntry(data.item, 'серверная история');
+  } catch (error) {
+    showToast(`Не удалось открыть исследование: ${error.message}`);
+  }
+}
+
+async function deleteServerEntry(id) {
+  try {
+    await serverRequest('/research/delete', { method: 'POST', body: JSON.stringify({ id }) });
+    showToast('Исследование удалено с сервера');
+    await renderHistoryList();
+  } catch (error) {
+    showToast(`Не удалось удалить: ${error.message}`);
+  }
+}
+
+function deleteLocalEntry(id) {
   writeEntries(loadEntries().filter((item) => item.id !== id));
   renderHistoryList();
 }
 
-function renderHistoryList() {
+function renderRows(entries, mode) {
   const list = document.getElementById('researchHistoryList');
-  if (!list) return;
   list.innerHTML = '';
-  const entries = loadEntries();
   if (!entries.length) {
     const empty = document.createElement('p');
     empty.className = 'hint';
@@ -118,14 +186,17 @@ function renderHistoryList() {
   for (const entry of entries) {
     const row = document.createElement('div');
     row.className = 'history-row';
-
     const info = document.createElement('div');
     const title = document.createElement('strong');
     title.textContent = entry.title || 'Исследование';
     const meta = document.createElement('div');
     meta.className = 'hint';
-    const date = entry.createdAt ? new Date(entry.createdAt).toLocaleString('ru-RU') : '';
-    meta.textContent = `${date} · источников: ${entry.payload?.items?.length || 0}${entry.aiReport ? ' · AI-отчёт' : ''}`;
+    const dateValue = entry.updatedAt || entry.createdAt;
+    const date = dateValue ? new Date(dateValue).toLocaleString('ru-RU') : '';
+    const sources = entry.sourceCount ?? entry.payload?.items?.length ?? 0;
+    const hasAi = entry.hasAiReport ?? Boolean(entry.aiReport);
+    const score = entry.qualityScore ? ` · Evidence ${entry.qualityScore}/100` : '';
+    meta.textContent = `${date} · источников: ${sources}${hasAi ? ' · AI-отчёт' : ''}${score}`;
     info.append(title, meta);
 
     const actions = document.createElement('div');
@@ -134,25 +205,50 @@ function renderHistoryList() {
     open.type = 'button';
     open.className = 'btn-sm';
     open.textContent = 'Открыть';
-    open.addEventListener('click', () => openEntry(entry));
+    open.addEventListener('click', () => mode === 'server' ? openServerEntry(entry.id) : restoreEntry(entry, 'этот браузер'));
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'btn-sm';
     del.textContent = 'Удалить';
-    del.addEventListener('click', () => deleteEntry(entry.id));
+    del.addEventListener('click', () => mode === 'server' ? deleteServerEntry(entry.id) : deleteLocalEntry(entry.id));
     actions.append(open, del);
     row.append(info, actions);
     list.append(row);
   }
 }
 
+async function renderHistoryList() {
+  const list = document.getElementById('researchHistoryList');
+  const kicker = document.getElementById('researchHistoryKicker');
+  const hint = document.getElementById('researchHistoryHint');
+  if (!list) return;
+  list.innerHTML = '<p class="hint">Загрузка истории…</p>';
+
+  try {
+    const data = await serverRequest('/research/list');
+    if (kicker) kicker.textContent = 'МОИ ИССЛЕДОВАНИЯ · SERVER';
+    if (hint) hint.textContent = 'Исследования хранятся в приватном серверном хранилище и доступны после входа по вашему HRP-коду.';
+    renderRows(data.items || [], 'server');
+    return;
+  } catch (error) {
+    if (!error.localFallback) {
+      list.innerHTML = `<p class="error-box visible">${esc(error.message)}</p>`;
+      return;
+    }
+  }
+
+  if (kicker) kicker.textContent = 'МОИ ИССЛЕДОВАНИЯ · LOCAL FALLBACK';
+  if (hint) hint.textContent = 'Серверное хранилище пока недоступно. Показаны исследования из localStorage этого браузера.';
+  renderRows(loadEntries(), 'local');
+}
+
 function closeHistory() {
   document.getElementById('researchHistoryOverlay')?.classList.remove('visible');
 }
 
-function openHistory() {
-  renderHistoryList();
+async function openHistory() {
   document.getElementById('researchHistoryOverlay')?.classList.add('visible');
+  await renderHistoryList();
 }
 
 export function installResearchHistory() {
@@ -164,7 +260,7 @@ export function installResearchHistory() {
     historyButton.type = 'button';
     historyButton.className = 'btn-sm';
     historyButton.id = 'btnResearchHistory';
-    historyButton.textContent = 'История';
+    historyButton.textContent = 'Мои исследования';
     historyButton.addEventListener('click', openHistory);
     topbar.prepend(historyButton);
   }
@@ -176,7 +272,7 @@ export function installResearchHistory() {
     saveButton.className = 'btn-sm';
     saveButton.id = 'btnSaveResearch';
     saveButton.textContent = 'Сохранить';
-    saveButton.setAttribute('data-tip', 'Сохранит исследование и AI-отчёт только в этом браузере');
+    saveButton.setAttribute('data-tip', 'В managed-режиме сохранит исследование в приватном серверном хранилище; без него использует локальный fallback');
     saveButton.addEventListener('click', saveCurrentResearch);
     resultActions.prepend(saveButton);
   }
@@ -188,12 +284,12 @@ export function installResearchHistory() {
     <div class="history-dialog" role="dialog" aria-modal="true" aria-labelledby="researchHistoryTitle">
       <div class="history-head">
         <div>
-          <div class="ai-report-kicker">ЛОКАЛЬНОЕ ХРАНИЛИЩЕ</div>
+          <div class="ai-report-kicker" id="researchHistoryKicker">МОИ ИССЛЕДОВАНИЯ</div>
           <h2 id="researchHistoryTitle">История исследований</h2>
         </div>
         <button type="button" class="btn-sm" id="btnCloseResearchHistory">Закрыть</button>
       </div>
-      <p class="hint">Данные сохраняются только в localStorage этого браузера. Не сохраняйте сюда чувствительные персональные данные на общем компьютере.</p>
+      <p class="hint" id="researchHistoryHint">Загрузка режима хранения…</p>
       <div id="researchHistoryList" class="history-list"></div>
     </div>`;
   overlay.addEventListener('click', (event) => {
