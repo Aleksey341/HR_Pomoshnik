@@ -41,6 +41,7 @@ jobs:
 
       - name: Check managed gateway JavaScript
         run: |
+          node --check 'api/[...path].js'
           node --check api/_lib/managed.js
           node --check api/_lib/blob-store.js
           node --check api/_lib/usage.js
@@ -53,16 +54,6 @@ jobs:
           node --check api/firecrawl/scrape.js
           node --check api/firecrawl/crawl.js
           node --check api/firecrawl/get.js
-          node --check api/usage/me.js
-          node --check api/research/list.js
-          node --check api/research/get.js
-          node --check api/research/save.js
-          node --check api/research/delete.js
-          node --check api/monitor/list.js
-          node --check api/monitor/save.js
-          node --check api/monitor/delete.js
-          node --check api/monitor/run.js
-          node --check api/cron/monitor.js
           node --check api/health.js
           node --check static/js/config.js
           node --check static/js/api.js
