@@ -1,6 +1,6 @@
 import { renderAiReport } from './ai.js';
 import { getApiRuntime } from './config.js';
-import { getLastAiReport, getLastPayload } from './state.js';
+import { getLastAiReport, getLastPayload, getLastQuality, getReportVariants, setLastQuality, setReportVariants } from './state.js';
 import { renderResults } from './results.js';
 import { getApiKey } from './storage.js';
 import { esc, showToast } from './ui.js';
@@ -92,6 +92,8 @@ function buildCurrentEntry() {
     brief: payload.meta?.researchBrief || document.getElementById('researchBrief')?.value?.trim() || '',
     payload: compactPayload(payload),
     aiReport: excerpt(getLastAiReport(), 180_000),
+    reportVariants: getReportVariants(),
+    quality: getLastQuality(),
   };
 }
 
@@ -139,6 +141,8 @@ function restoreEntry(entry, locationLabel) {
   if (!entry?.payload?.items?.length) return;
   const brief = document.getElementById('researchBrief');
   if (brief && entry.brief) brief.value = entry.brief;
+  setReportVariants(entry.reportVariants || {});
+  setLastQuality(entry.quality || null);
   renderResults(entry.payload.title, entry.payload.items, entry.payload.meta || {});
   if (entry.aiReport) {
     renderAiReport(entry.aiReport);
@@ -195,7 +199,8 @@ function renderRows(entries, mode) {
     const date = dateValue ? new Date(dateValue).toLocaleString('ru-RU') : '';
     const sources = entry.sourceCount ?? entry.payload?.items?.length ?? 0;
     const hasAi = entry.hasAiReport ?? Boolean(entry.aiReport);
-    const score = entry.qualityScore ? ` · Evidence ${entry.qualityScore}/100` : '';
+    const scoreValue = entry.qualityScore ?? entry.quality?.score;
+    const score = scoreValue ? ` · Evidence ${scoreValue}/100` : '';
     meta.textContent = `${date} · источников: ${sources}${hasAi ? ' · AI-отчёт' : ''}${score}`;
     info.append(title, meta);
 
