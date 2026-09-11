@@ -219,10 +219,14 @@ export async function doResearch() {
         mode: 'research',
         keywordsUsed: kwSlice.length,
         keywordsTotal: keywords.length,
-        domains: domains.length ? domains.join(', ') : 'весь web',
+        domains,
+        researchQueries: kwSlice,
         domainsStrict: domains.length > 0 && !broad,
         filteredOut,
-        researchBrief: document.getElementById('researchBrief').value.trim()
+        researchBrief: document.getElementById('researchBrief').value.trim(),
+        dateFrom: dateFilter ? dateFrom : '',
+        broad,
+        scrape
       });
 
       if (filteredOut > 0) {
