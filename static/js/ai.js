@@ -35,7 +35,6 @@ function renderAiReport(text) {
 function excerptText(value, limit) {
   const text = String(value || '');
   if (text.length <= limit) return text;
-
   const marker = '\n\n[...середина источника сокращена...]\n\n';
   const available = Math.max(0, limit - marker.length);
   const head = Math.floor(available * 0.65);
@@ -43,21 +42,22 @@ function excerptText(value, limit) {
   return `${text.slice(0, head)}${marker}${text.slice(-tail)}`;
 }
 
+function sourceId(item, index) {
+  return item?.sourceId || `S${String(index + 1).padStart(3, '0')}`;
+}
+
 function buildContextForItems(items, useMarkdown, maxTotal) {
   const metadataReserve = Math.min(12_000, Math.floor(maxTotal * 0.25));
   const textBudget = Math.max(0, maxTotal - metadataReserve);
-  const perItemMdLimit = items.length
-    ? Math.max(350, Math.floor(textBudget / items.length))
-    : 0;
+  const perItemMdLimit = items.length ? Math.max(350, Math.floor(textBudget / items.length)) : 0;
   let totalChars = 0;
   const blocks = [];
 
   items.forEach((it, index) => {
-    let chunk = `### Материал ${index + 1}\nЗаголовок: ${it.title || 'Без названия'}\nURL: ${it.url || it.sourceURL || '—'}\n`;
+    const id = sourceId(it, index);
+    let chunk = `### [${id}]\nЗаголовок: ${it.title || 'Без названия'}\nURL: ${it.url || it.sourceURL || '—'}\n`;
     if (it.searchKeyword) chunk += `Ключ: ${it.searchKeyword}\n`;
-    if (it.description || it.snippet) {
-      chunk += `Описание: ${excerptText(it.description || it.snippet, 1200)}\n`;
-    }
+    if (it.description || it.snippet) chunk += `Описание: ${excerptText(it.description || it.snippet, 1200)}\n`;
     if (useMarkdown && (it.markdown || it.content)) {
       chunk += `\nТекст:\n${excerptText(it.markdown || it.content, perItemMdLimit)}\n`;
     }
@@ -84,15 +84,22 @@ function splitIntoBatches(items) {
 
 function analysisBrief() {
   const payload = getLastPayload();
-  return (
-    payload?.meta?.researchBrief ||
-    document.getElementById('researchBrief').value.trim() ||
-    'Анализ собранных материалов из интернета'
-  );
+  return payload?.meta?.researchBrief || document.getElementById('researchBrief').value.trim() || 'Анализ собранных материалов из интернета';
 }
 
 function analysisFocus() {
   return document.getElementById('aiFocus').value.trim();
+}
+
+function buildSourceRegister(items) {
+  if (!items.length) return '';
+  const rows = items.map((item, index) => {
+    const id = sourceId(item, index);
+    const title = String(item.title || 'Без названия').replace(/\n/g, ' ').trim();
+    const url = item.url || item.sourceURL || '';
+    return `- [${id}] ${title}${url ? ` - ${url}` : ''}`;
+  });
+  return `\n\n## Реестр источников\n${rows.join('\n')}`;
 }
 
 export function buildAiPrompt() {
@@ -104,8 +111,8 @@ export function buildAiPrompt() {
   const keywords = [...new Set(items.map((i) => i.searchKeyword).filter(Boolean))];
 
   return {
-    system: 'Ты аналитик открытых источников. Синтезируй переданные материалы в точный и практически полезный отчёт строго по целям пользователя.',
-    user: `Техническое задание анализа:\n${brief}\n\n${focus ? `Дополнительный фокус анализа:\n${focus}\n\n` : ''}Статистика сбора:\n- Всего источников: ${items.length}\n- Передано в этот промпт: ${ctx.used}\n- Объём контекста: ${ctx.characters} символов\n${keywords.length ? `- Ключевые запросы: ${keywords.slice(0, 20).join('; ')}${keywords.length > 20 ? '…' : ''}\n` : ''}\nМатериалы:\n${ctx.text}\n\nИнструкция:\n1. Следуй техническому заданию и фокусу.\n2. Проверяй весь доступный контекст.\n3. Отделяй факты из источников от собственных выводов и рекомендаций.\n4. Не выдумывай факты. Если данных действительно нет, пиши «нет данных».\n5. Ответ на русском, в корректном markdown.`
+    system: 'Ты аналитик открытых источников. Синтезируй материалы в доказательный отчёт. Существенные фактические утверждения сопровождай ссылками на идентификаторы источников вида [S001].',
+    user: `Техническое задание анализа:\n${brief}\n\n${focus ? `Дополнительный фокус анализа:\n${focus}\n\n` : ''}Статистика сбора:\n- Всего источников: ${items.length}\n- Передано в этот промпт: ${ctx.used}\n- Объём контекста: ${ctx.characters} символов\n${keywords.length ? `- Ключевые запросы: ${keywords.slice(0, 20).join('; ')}${keywords.length > 20 ? '…' : ''}\n` : ''}\nМатериалы:\n${ctx.text}\n\nИнструкция:\n1. Следуй техническому заданию и фокусу.\n2. После каждого существенного факта указывай один или несколько source ID: [S001], [S002].\n3. Не придумывай source ID и не ссылайся на источник, которого нет в материалах.\n4. Отделяй факты от выводов и рекомендаций.\n5. Если данных действительно нет, пиши «нет данных».\n6. Ответ на русском, в корректном markdown.`
   };
 }
 
@@ -124,10 +131,7 @@ export async function callOpenAiAnalysis(prompt, maxCompletionTokens = 4500) {
     if (!accessCode) throw new Error('Введите код доступа HR Помощник');
     const res = await fetch(`${runtime.base}/ai/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessCode}`
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessCode}` },
       body: JSON.stringify(payload)
     });
     const json = await res.json().catch(() => ({}));
@@ -137,21 +141,12 @@ export async function callOpenAiAnalysis(prompt, maxCompletionTokens = 4500) {
 
   saveOpenAiKey();
   const openaiKey = getOpenAiKey() || undefined;
-  const directPayload = {
-    openaiKey,
-    model: 'gpt-5.6-sol',
-    messages: payload.messages,
-    max_completion_tokens: maxCompletionTokens
-  };
+  const directPayload = { openaiKey, model: 'gpt-5.6-sol', messages: payload.messages, max_completion_tokens: maxCompletionTokens };
 
   if (USE_LOCAL_PROXY) {
     const headers = { 'Content-Type': 'application/json' };
     if (openaiKey) headers.Authorization = `Bearer ${openaiKey}`;
-    const res = await fetch(`${API_BASE}/api/ai/analyze`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(directPayload)
-    });
+    const res = await fetch(`${API_BASE}/api/ai/analyze`, { method: 'POST', headers, body: JSON.stringify(directPayload) });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || extractApiError(json, res.status));
     return json.content || json.text || '';
@@ -159,19 +154,10 @@ export async function callOpenAiAnalysis(prompt, maxCompletionTokens = 4500) {
 
   const apiKey = getOpenAiKey();
   if (!apiKey) throw new Error('Для direct-режима укажите OpenAI API key или включите managed service');
-
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-5.6-sol',
-      messages: payload.messages,
-      reasoning_effort: 'none',
-      max_completion_tokens: maxCompletionTokens
-    })
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: 'gpt-5.6-sol', messages: payload.messages, reasoning_effort: 'none', max_completion_tokens: maxCompletionTokens })
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error?.message || extractApiError(json, res.status));
@@ -187,10 +173,11 @@ async function analyzeAllSources() {
 
   if (batches.length === 1) {
     const ctx = buildContextForItems(items, useMd, 115_000);
-    return callOpenAiAnalysis({
-      system: 'Ты аналитик открытых источников. Подготовь доказательный отчёт по заданию пользователя.',
-      user: `Задание:\n${brief}\n\n${focus ? `Фокус:\n${focus}\n\n` : ''}Материалы:\n${ctx.text}\n\nСформируй итоговый отчёт. Не выдумывай факты, отделяй факты от выводов и рекомендаций.`
+    const report = await callOpenAiAnalysis({
+      system: 'Ты аналитик открытых источников. Подготовь доказательный отчёт. Каждый существенный факт снабжай source ID вида [S001].',
+      user: `Задание:\n${brief}\n\n${focus ? `Фокус:\n${focus}\n\n` : ''}Материалы:\n${ctx.text}\n\nСформируй итоговый отчёт. Не выдумывай факты. Для фактических утверждений указывай только существующие [Sxxx]. Отделяй факты от выводов и рекомендаций.`
     }, 5000);
+    return report + buildSourceRegister(items);
   }
 
   const partials = [];
@@ -199,17 +186,18 @@ async function analyzeAllSources() {
     setProgress('aiProgress', `AI-анализ пакета ${index + 1} из ${batches.length} (${batch.length} источников)…`);
     const ctx = buildContextForItems(batch, useMd, BATCH_CONTEXT_CHARS);
     const partial = await callOpenAiAnalysis({
-      system: 'Ты аналитик открытых источников. Это промежуточный этап большого исследования. Извлеки только проверяемые факты, противоречия, пробелы и выводы, полезные для итогового задания.',
-      user: `Общее задание:\n${brief}\n\n${focus ? `Фокус:\n${focus}\n\n` : ''}Это пакет ${index + 1} из ${batches.length}. В пакете ${batch.length} источников.\n\n${ctx.text}\n\nСделай компактную промежуточную сводку. Сохраняй URL рядом с существенными фактами. Не пытайся писать финальный отчёт.`
+      system: 'Ты аналитик открытых источников. Это промежуточный этап большого исследования. Сохраняй source ID рядом с каждым фактом.',
+      user: `Общее задание:\n${brief}\n\n${focus ? `Фокус:\n${focus}\n\n` : ''}Это пакет ${index + 1} из ${batches.length}.\n\n${ctx.text}\n\nСделай компактную промежуточную сводку. Каждый существенный факт снабжай существующим [Sxxx]. Выдели противоречия и пробелы. Не пиши финальный отчёт.`
     }, 2200);
     partials.push(`## Пакет ${index + 1}\n${partial}`);
   }
 
   setProgress('aiProgress', `Финальный синтез ${items.length} источников…`);
-  return callOpenAiAnalysis({
-    system: 'Ты ведущий аналитик. Синтезируй промежуточные результаты большого исследования в единый доказательный отчёт.',
-    user: `Техническое задание:\n${brief}\n\n${focus ? `Дополнительный фокус:\n${focus}\n\n` : ''}Проанализировано источников: ${items.length}. Все источники были распределены между ${batches.length} пакетами.\n\nПромежуточные результаты:\n${partials.join('\n\n---\n\n')}\n\nСформируй итоговый отчёт на русском в markdown. Убери дубли. Покажи ключевые факты, паттерны, противоречия, пробелы, практические выводы и следующие шаги. Не добавляй факты, которых нет в промежуточных результатах.`
+  const report = await callOpenAiAnalysis({
+    system: 'Ты ведущий аналитик. Синтезируй промежуточные результаты в доказательный отчёт и сохраняй source ID.',
+    user: `Техническое задание:\n${brief}\n\n${focus ? `Дополнительный фокус:\n${focus}\n\n` : ''}Проанализировано источников: ${items.length}.\n\nПромежуточные результаты:\n${partials.join('\n\n---\n\n')}\n\nСформируй итоговый отчёт на русском в markdown. Убери дубли. Существенные факты должны иметь ссылки на [Sxxx]. Не придумывай новые ID. Раздели факты, паттерны, противоречия, пробелы, выводы и следующие шаги.`
   }, 5500);
+  return report + buildSourceRegister(items);
 }
 
 export async function doAiAnalyze() {
@@ -218,7 +206,6 @@ export async function doAiAnalyze() {
     alert('Сначала выполните поиск, исследование или парсинг URL и соберите материалы');
     return;
   }
-
   const btn = document.getElementById('btnAiAnalyze');
   btn.disabled = true;
   hideError();
