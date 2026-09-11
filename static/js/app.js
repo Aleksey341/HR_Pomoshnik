@@ -13,6 +13,25 @@ function ensureFeatureStyles() {
   document.head.append(link);
 }
 
+function capSelect(id, maxValue) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  let best = null;
+  [...select.options].forEach((option) => {
+    const value = Number(option.value);
+    if (Number.isFinite(value) && value > maxValue) option.disabled = true;
+    if (Number.isFinite(value) && value <= maxValue && (best === null || value > best)) best = value;
+  });
+  if (Number(select.value) > maxValue && best !== null) select.value = String(best);
+}
+
+function applyManagedUiLimits() {
+  capSelect('searchLimit', 50);
+  capSelect('researchLimit', 50);
+  capSelect('crawlLimit', 100);
+  capSelect('crawlDepth', 6);
+}
+
 function installAccessCheck(runtime, apiField, apiInput) {
   if (!apiField || !apiInput || document.getElementById('btnCheckAccess')) return;
 
@@ -58,9 +77,7 @@ function installAccessCheck(runtime, apiField, apiInput) {
 function installAiNavigation() {
   const tab = document.getElementById('tabAiBtn');
   if (!tab) return;
-
   tab.classList.remove('tab-hidden');
-
   if (tab.dataset.autoOpenInstalled === '1') return;
   tab.dataset.autoOpenInstalled = '1';
 
@@ -71,10 +88,7 @@ function installAiNavigation() {
     }
   });
 
-  observer.observe(tab, {
-    attributes: true,
-    attributeFilter: ['class']
-  });
+  observer.observe(tab, { attributes: true, attributeFilter: ['class'] });
 }
 
 async function applyRuntimeUi() {
@@ -99,6 +113,7 @@ async function applyRuntimeUi() {
   if (heroTitle) heroTitle.textContent = 'HR Помощник: поиск, исследования и AI-анализ';
 
   if (runtime.managed) {
+    applyManagedUiLimits();
     if (accessCardHead) accessCardHead.textContent = 'Доступ';
     if (apiLabel) apiLabel.textContent = 'Код доступа HR Помощник';
     if (apiInput) {
