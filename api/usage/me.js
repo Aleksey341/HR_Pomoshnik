@@ -1,4 +1,5 @@
 import { applyCors, handlePreflight, requireManagedAccess } from "../_lib/managed.js";
+import { listAll, storageUserKey } from "../_lib/blob-store.js";
 import { estimatedCost, getUsageSummary, quotaForUser } from "../_lib/usage.js";
 
 function remaining(limits, usage) {
@@ -10,6 +11,23 @@ function remaining(limits, usage) {
   return out;
 }
 
+async function addResourceCounts(user, summary) {
+  const usage = { ...(summary.usage || {}) };
+  if (!summary.centralized) return usage;
+  const key = storageUserKey(user);
+  try {
+    const [research, monitors] = await Promise.all([
+      listAll(`research/${key}/`),
+      listAll(`monitors/${key}/`),
+    ]);
+    usage.saved_researches = research.length;
+    usage.monitors = monitors.length;
+  } catch (_error) {
+    // Usage ledger remains usable even when a secondary resource count fails.
+  }
+  return usage;
+}
+
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
   applyCors(req, res);
@@ -18,6 +36,7 @@ export default async function handler(req, res) {
 
   const user = req.hrPomoshnikUser;
   const summary = await getUsageSummary(user);
+  const usage = await addResourceCounts(user, summary);
   const { plan, limits } = quotaForUser(user);
   return res.status(200).json({
     ok: true,
@@ -25,9 +44,9 @@ export default async function handler(req, res) {
     plan,
     month: summary.month,
     centralized: summary.centralized,
-    usage: summary.usage,
+    usage,
     limits,
-    remaining: remaining(limits, summary.usage),
-    estimated_cost_usd: estimatedCost(summary),
+    remaining: remaining(limits, usage),
+    estimated_cost_usd: estimatedCost({ ...summary, usage }),
   });
 }
