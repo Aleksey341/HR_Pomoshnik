@@ -5,6 +5,7 @@ import {
   requireEnv,
   requireManagedAccess,
 } from "../_lib/managed.js";
+import { enforceMonthlyQuota, recordUsage } from "../_lib/usage.js";
 
 const MAX_AI_INPUT_CHARS = 140_000;
 const MAX_AI_MESSAGES = 16;
@@ -49,8 +50,12 @@ export default async function handler(req, res) {
     ? Math.max(128, Math.min(Math.trunc(requestedMax), 6000))
     : 4500;
 
+  const quotaDelta = { ai_calls: 1, ai_input_chars: totalChars };
+  if (!(await enforceMonthlyQuota(req, res, quotaDelta))) return;
+
+  const model = process.env.OPENAI_MODEL || "gpt-5.6-sol";
   const payload = {
-    model: process.env.OPENAI_MODEL || "gpt-5.6-sol",
+    model,
     messages,
     reasoning_effort: process.env.OPENAI_REASONING_EFFORT || "none",
     max_completion_tokens: maxCompletionTokens,
@@ -70,8 +75,25 @@ export default async function handler(req, res) {
       const message = data?.error?.message || `OpenAI HTTP ${upstream.status}`;
       return res.status(upstream.status).json({ error: message });
     }
+
     const content = data?.choices?.[0]?.message?.content || "";
-    return res.status(200).json({ success: true, content });
+    const usage = data?.usage || {};
+    await recordUsage(req.hrPomoshnikUser, {
+      ...quotaDelta,
+      ai_prompt_tokens: Number(usage.prompt_tokens || 0),
+      ai_output_tokens: Number(usage.completion_tokens || 0),
+      ai_total_tokens: Number(usage.total_tokens || 0),
+    }, { kind: "openai-analyze", status: upstream.status, model });
+
+    return res.status(200).json({
+      success: true,
+      content,
+      usage: {
+        prompt_tokens: Number(usage.prompt_tokens || 0),
+        completion_tokens: Number(usage.completion_tokens || 0),
+        total_tokens: Number(usage.total_tokens || 0),
+      },
+    });
   } catch (_error) {
     return res.status(502).json({ error: "Не удалось связаться с OpenAI" });
   }
