@@ -2,33 +2,35 @@ import { API_BASE, USE_LOCAL_PROXY, getApiRuntime } from './config.js';
 import { extractApiError } from './api.js';
 import { getLastPayload, setLastAiReport } from './state.js';
 import { getApiKey, getOpenAiKey, saveOpenAiKey } from './storage.js';
-import { esc, hideError, hideLoader, hideProgress, runLoader, setProgress, showError, showToast } from './ui.js';
+import { hideError, hideLoader, hideProgress, runLoader, setProgress, showError, showToast } from './ui.js';
 import { updateResultsViewForTab } from './results.js';
+import { renderMarkdownSafe } from './markdown.js';
 
 const MAX_BATCHES = 8;
 const BATCH_CONTEXT_CHARS = 30_000;
 const COPY_CONTEXT_CHARS = 120_000;
 
-function simpleMdToHtml(md) {
-  return esc(md)
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
-    .replace(/\n{2,}/g, '</p><p>')
-    .replace(/^(?!<[hul])/gm, '')
-    .replace(/^/, '<p>')
-    .replace(/$/, '</p>');
-}
-
-function renderAiReport(text) {
+export function renderAiReport(text) {
   setLastAiReport(text);
+  const payload = getLastPayload();
+  const sourceCount = payload?.items?.length || 0;
+  const evidenceCount = new Set(String(text || '').match(/S\d{3,}/g) || []).size;
+  const generatedAt = new Date().toLocaleString('ru-RU');
+
   document.getElementById('placeholder').style.display = 'none';
   document.getElementById('resultsArea').style.display = 'block';
   document.getElementById('resultsTitle').textContent = 'AI-анализ и рекомендации';
-  document.getElementById('aiResultsArea').innerHTML = simpleMdToHtml(text);
+  document.getElementById('aiResultsArea').innerHTML = `
+    <section class="ai-report-hero">
+      <div class="ai-report-kicker">HR ПОМОЩНИК · EVIDENCE REPORT</div>
+      <h2>Итоговый аналитический отчёт</h2>
+      <div class="ai-report-meta">
+        <span>Источников: <strong>${sourceCount}</strong></span>
+        <span>Использовано ID: <strong>${evidenceCount}</strong></span>
+        <span>Сформирован: <strong>${generatedAt}</strong></span>
+      </div>
+    </section>
+    <section class="ai-report-body">${renderMarkdownSafe(text)}</section>`;
   updateResultsViewForTab('ai');
 }
 
