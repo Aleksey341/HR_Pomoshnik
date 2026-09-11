@@ -1,4 +1,13 @@
-import { FIRECRAWL_API, applyCors, handlePreflight, proxyJson, requireEnv, requireManagedAccess, sendProxyResponse } from "../_lib/managed.js";
+import {
+  FIRECRAWL_API,
+  applyCors,
+  enforceRateLimit,
+  handlePreflight,
+  proxyJson,
+  requireEnv,
+  requireManagedAccess,
+  sendProxyResponse,
+} from "../_lib/managed.js";
 
 function resolveTarget(req) {
   const nextUrl = String(req.query?.next || "").trim();
@@ -16,6 +25,7 @@ export default async function handler(req, res) {
   applyCors(req, res);
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   if (!requireManagedAccess(req, res)) return;
+  if (!enforceRateLimit(req, res, "firecrawl-get", 240, 10 * 60_000)) return;
   const apiKey = requireEnv("FIRECRAWL_API_KEY", res);
   if (!apiKey) return;
   const url = resolveTarget(req);
