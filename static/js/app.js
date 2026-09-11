@@ -1,6 +1,7 @@
 import { initStorage } from './storage.js';
 import { abortActiveRequest } from './api.js';
 import { getApiRuntime } from './config.js';
+import { installUsageDashboard } from './usage.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
 
@@ -134,6 +135,7 @@ async function applyRuntimeUi() {
     if (banner) banner.textContent = 'Защищённый режим: используйте персональный код HRP. OpenAI и Firecrawl API-ключи хранятся только на сервере.';
     installAccessCheck(runtime, apiField, apiInput);
     installAiNavigation();
+    installUsageDashboard();
   }
 }
 
