@@ -1,7 +1,7 @@
 import { initStorage } from './storage.js';
 import { abortActiveRequest } from './api.js';
 import { getApiRuntime } from './config.js';
-import { installUsageDashboard } from './usage.js';
+import { installUsageDashboard, refreshUsageQuietly } from './usage.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
 
@@ -65,6 +65,7 @@ function installAccessCheck(runtime, apiField, apiInput) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
       status.textContent = `Доступ подтверждён: ${data.user || 'пользователь'}`;
+      await refreshUsageQuietly(code);
     } catch (err) {
       status.textContent = `Доступ не подтверждён: ${err.message || err}`;
     } finally {
