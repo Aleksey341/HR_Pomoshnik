@@ -1,4 +1,23 @@
-import { applyCors, handlePreflight, requireEnv, requireManagedAccess } from "../_lib/managed.js";
+import {
+  applyCors,
+  enforceRateLimit,
+  handlePreflight,
+  requireEnv,
+  requireManagedAccess,
+} from "../_lib/managed.js";
+
+const MAX_AI_INPUT_CHARS = 140_000;
+const MAX_AI_MESSAGES = 16;
+
+function normalizeMessages(incoming) {
+  const messages = Array.isArray(incoming) ? incoming.slice(0, MAX_AI_MESSAGES) : [];
+  return messages
+    .map((message) => ({
+      role: ["system", "user", "assistant"].includes(message?.role) ? message.role : "user",
+      content: String(message?.content || ""),
+    }))
+    .filter((message) => message.content.trim());
+}
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -9,13 +28,21 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
   if (!requireManagedAccess(req, res)) return;
+  if (!enforceRateLimit(req, res, "openai-analyze", 12)) return;
 
   const openaiKey = requireEnv("OPENAI_API_KEY", res);
   if (!openaiKey) return;
 
   const incoming = req.body && typeof req.body === "object" ? req.body : {};
-  const messages = Array.isArray(incoming.messages) ? incoming.messages : [];
+  const messages = normalizeMessages(incoming.messages);
   if (!messages.length) return res.status(400).json({ error: "Нет messages для анализа" });
+
+  const totalChars = messages.reduce((sum, item) => sum + item.content.length, 0);
+  if (totalChars > MAX_AI_INPUT_CHARS) {
+    return res.status(413).json({
+      error: `Слишком большой AI-контекст: ${totalChars} символов. Максимум ${MAX_AI_INPUT_CHARS}.`,
+    });
+  }
 
   const requestedMax = Number(incoming.max_completion_tokens || 4500);
   const maxCompletionTokens = Number.isFinite(requestedMax)
