@@ -5,6 +5,10 @@ import { getApiKey, getOpenAiKey, saveOpenAiKey } from './storage.js';
 import { esc, hideError, hideLoader, hideProgress, runLoader, setProgress, showError, showToast } from './ui.js';
 import { updateResultsViewForTab } from './results.js';
 
+const MAX_BATCHES = 8;
+const BATCH_CONTEXT_CHARS = 30_000;
+const COPY_CONTEXT_CHARS = 120_000;
+
 function simpleMdToHtml(md) {
   return esc(md)
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
@@ -32,87 +36,86 @@ function excerptText(value, limit) {
   const text = String(value || '');
   if (text.length <= limit) return text;
 
-  const marker = '\n\n[...часть длинного источника сокращена из-за общего лимита контекста...]\n\n';
+  const marker = '\n\n[...середина источника сокращена...]\n\n';
   const available = Math.max(0, limit - marker.length);
   const head = Math.floor(available * 0.65);
   const tail = Math.max(0, available - head);
   return `${text.slice(0, head)}${marker}${text.slice(-tail)}`;
 }
 
-function buildResearchContextForAi(useMarkdown) {
-  const allItems = getLastPayload()?.items || [];
-  const items = allItems.slice(0, 30);
-  const maxTotal = 120000;
-  const metadataReserve = 12000;
+function buildContextForItems(items, useMarkdown, maxTotal) {
+  const metadataReserve = Math.min(12_000, Math.floor(maxTotal * 0.25));
   const textBudget = Math.max(0, maxTotal - metadataReserve);
   const perItemMdLimit = items.length
-    ? Math.min(75000, Math.max(3000, Math.floor(textBudget / items.length)))
+    ? Math.max(350, Math.floor(textBudget / items.length))
     : 0;
-
   let totalChars = 0;
   const blocks = [];
 
-  for (const it of items) {
-    let chunk = `### ${it.title || 'Без названия'}\nURL: ${it.url || it.sourceURL || '—'}\n`;
+  items.forEach((it, index) => {
+    let chunk = `### Материал ${index + 1}\nЗаголовок: ${it.title || 'Без названия'}\nURL: ${it.url || it.sourceURL || '—'}\n`;
     if (it.searchKeyword) chunk += `Ключ: ${it.searchKeyword}\n`;
     if (it.description || it.snippet) {
-      chunk += `Описание: ${it.description || it.snippet}\n`;
+      chunk += `Описание: ${excerptText(it.description || it.snippet, 1200)}\n`;
     }
     if (useMarkdown && (it.markdown || it.content)) {
       chunk += `\nТекст:\n${excerptText(it.markdown || it.content, perItemMdLimit)}\n`;
     }
-
     const remaining = maxTotal - totalChars;
-    if (remaining <= 0) break;
-    if (chunk.length > remaining) {
-      if (remaining > 500) {
-        blocks.push(excerptText(chunk, remaining));
-        totalChars += remaining;
-      }
-      break;
+    if (remaining <= 0) return;
+    if (chunk.length > remaining) chunk = excerptText(chunk, remaining);
+    if (chunk.trim()) {
+      blocks.push(chunk);
+      totalChars += chunk.length;
     }
+  });
 
-    blocks.push(chunk);
-    totalChars += chunk.length;
-  }
+  return { text: blocks.join('\n---\n'), used: blocks.length, characters: totalChars };
+}
 
-  return {
-    text: blocks.join('\n---\n'),
-    used: blocks.length,
-    total: allItems.length,
-    characters: totalChars
-  };
+function splitIntoBatches(items) {
+  if (!items.length) return [];
+  const batchCount = Math.min(MAX_BATCHES, items.length);
+  const size = Math.ceil(items.length / batchCount);
+  const batches = [];
+  for (let i = 0; i < items.length; i += size) batches.push(items.slice(i, i + size));
+  return batches;
+}
+
+function analysisBrief() {
+  const payload = getLastPayload();
+  return (
+    payload?.meta?.researchBrief ||
+    document.getElementById('researchBrief').value.trim() ||
+    'Анализ собранных материалов из интернета'
+  );
+}
+
+function analysisFocus() {
+  return document.getElementById('aiFocus').value.trim();
 }
 
 export function buildAiPrompt() {
-  const lastPayload = getLastPayload();
-  const brief =
-    lastPayload?.meta?.researchBrief ||
-    document.getElementById('researchBrief').value.trim() ||
-    'Анализ собранных материалов из интернета';
-  const focus = document.getElementById('aiFocus').value.trim();
+  const items = getLastPayload()?.items || [];
+  const brief = analysisBrief();
+  const focus = analysisFocus();
   const useMd = document.getElementById('aiUseMarkdown').checked;
-  const ctx = buildResearchContextForAi(useMd);
-  const keywords = [
-    ...new Set((lastPayload?.items || []).map((i) => i.searchKeyword).filter(Boolean))
-  ];
-
-  const userPrompt = `Техническое задание анализа:\n${brief}\n\n${focus ? `Дополнительный фокус анализа:\n${focus}\n\n` : ''}Статистика сбора:\n- Всего источников: ${ctx.total}\n- Передано в анализ: ${ctx.used}\n- Объём переданного контекста: ${ctx.characters} символов\n${keywords.length ? `- Ключевые запросы: ${keywords.slice(0, 15).join('; ')}${keywords.length > 15 ? '…' : ''}\n` : ''}\nМатериалы:\n${ctx.text}\n\nИнструкция:\n1. Прочитай техническое задание и дополнительный фокус: они задают тему, цели и нужную структуру отчёта.\n2. Анализируй весь переданный материал, включая разделы в середине и конце длинных источников. Не делай вывод «нет данных», пока не проверил весь доступный контекст.\n3. Если в задании уже перечислены разделы, таблицы, KPI или вопросы, используй их как оглавление отчёта.\n4. Если структура не задана, используй: краткая сводка; ключевые находки с URL; паттерны и противоречия; пробелы в данных; рекомендации и следующие шаги.\n5. Опирайся только на переданные материалы. Не выдумывай факты. Если данных действительно нет, пиши «нет данных».\n6. Отделяй факты от выводов и рекомендаций.\n7. Ответ на русском, в корректном markdown. Не экранируй символы markdown обратными слешами без необходимости.`;
+  const ctx = buildContextForItems(items, useMd, COPY_CONTEXT_CHARS);
+  const keywords = [...new Set(items.map((i) => i.searchKeyword).filter(Boolean))];
 
   return {
-    system:
-      'Ты аналитик открытых источников. Синтезируй переданные материалы в точный и практически полезный отчёт строго по целям пользователя.',
-    user: userPrompt
+    system: 'Ты аналитик открытых источников. Синтезируй переданные материалы в точный и практически полезный отчёт строго по целям пользователя.',
+    user: `Техническое задание анализа:\n${brief}\n\n${focus ? `Дополнительный фокус анализа:\n${focus}\n\n` : ''}Статистика сбора:\n- Всего источников: ${items.length}\n- Передано в этот промпт: ${ctx.used}\n- Объём контекста: ${ctx.characters} символов\n${keywords.length ? `- Ключевые запросы: ${keywords.slice(0, 20).join('; ')}${keywords.length > 20 ? '…' : ''}\n` : ''}\nМатериалы:\n${ctx.text}\n\nИнструкция:\n1. Следуй техническому заданию и фокусу.\n2. Проверяй весь доступный контекст.\n3. Отделяй факты из источников от собственных выводов и рекомендаций.\n4. Не выдумывай факты. Если данных действительно нет, пиши «нет данных».\n5. Ответ на русском, в корректном markdown.`
   };
 }
 
-async function callOpenAiAnalysis(prompt) {
+export async function callOpenAiAnalysis(prompt, maxCompletionTokens = 4500) {
   const payload = {
     messages: [
       { role: 'system', content: prompt.system },
       { role: 'user', content: prompt.user }
     ],
-    max_completion_tokens: 4500
+    max_completion_tokens: maxCompletionTokens
   };
 
   const runtime = await getApiRuntime();
@@ -137,7 +140,8 @@ async function callOpenAiAnalysis(prompt) {
   const directPayload = {
     openaiKey,
     model: 'gpt-5.6-sol',
-    messages: payload.messages
+    messages: payload.messages,
+    max_completion_tokens: maxCompletionTokens
   };
 
   if (USE_LOCAL_PROXY) {
@@ -154,9 +158,7 @@ async function callOpenAiAnalysis(prompt) {
   }
 
   const apiKey = getOpenAiKey();
-  if (!apiKey) {
-    throw new Error('Для direct-режима укажите OpenAI API key или включите managed service');
-  }
+  if (!apiKey) throw new Error('Для direct-режима укажите OpenAI API key или включите managed service');
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -168,12 +170,46 @@ async function callOpenAiAnalysis(prompt) {
       model: 'gpt-5.6-sol',
       messages: payload.messages,
       reasoning_effort: 'none',
-      max_completion_tokens: 4500
+      max_completion_tokens: maxCompletionTokens
     })
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error?.message || extractApiError(json, res.status));
   return json.choices?.[0]?.message?.content || '';
+}
+
+async function analyzeAllSources() {
+  const items = getLastPayload()?.items || [];
+  const useMd = document.getElementById('aiUseMarkdown').checked;
+  const brief = analysisBrief();
+  const focus = analysisFocus();
+  const batches = splitIntoBatches(items);
+
+  if (batches.length === 1) {
+    const ctx = buildContextForItems(items, useMd, 115_000);
+    return callOpenAiAnalysis({
+      system: 'Ты аналитик открытых источников. Подготовь доказательный отчёт по заданию пользователя.',
+      user: `Задание:\n${brief}\n\n${focus ? `Фокус:\n${focus}\n\n` : ''}Материалы:\n${ctx.text}\n\nСформируй итоговый отчёт. Не выдумывай факты, отделяй факты от выводов и рекомендаций.`
+    }, 5000);
+  }
+
+  const partials = [];
+  for (let index = 0; index < batches.length; index++) {
+    const batch = batches[index];
+    setProgress('aiProgress', `AI-анализ пакета ${index + 1} из ${batches.length} (${batch.length} источников)…`);
+    const ctx = buildContextForItems(batch, useMd, BATCH_CONTEXT_CHARS);
+    const partial = await callOpenAiAnalysis({
+      system: 'Ты аналитик открытых источников. Это промежуточный этап большого исследования. Извлеки только проверяемые факты, противоречия, пробелы и выводы, полезные для итогового задания.',
+      user: `Общее задание:\n${brief}\n\n${focus ? `Фокус:\n${focus}\n\n` : ''}Это пакет ${index + 1} из ${batches.length}. В пакете ${batch.length} источников.\n\n${ctx.text}\n\nСделай компактную промежуточную сводку. Сохраняй URL рядом с существенными фактами. Не пытайся писать финальный отчёт.`
+    }, 2200);
+    partials.push(`## Пакет ${index + 1}\n${partial}`);
+  }
+
+  setProgress('aiProgress', `Финальный синтез ${items.length} источников…`);
+  return callOpenAiAnalysis({
+    system: 'Ты ведущий аналитик. Синтезируй промежуточные результаты большого исследования в единый доказательный отчёт.',
+    user: `Техническое задание:\n${brief}\n\n${focus ? `Дополнительный фокус:\n${focus}\n\n` : ''}Проанализировано источников: ${items.length}. Все источники были распределены между ${batches.length} пакетами.\n\nПромежуточные результаты:\n${partials.join('\n\n---\n\n')}\n\nСформируй итоговый отчёт на русском в markdown. Убери дубли. Покажи ключевые факты, паттерны, противоречия, пробелы, практические выводы и следующие шаги. Не добавляй факты, которых нет в промежуточных результатах.`
+  }, 5500);
 }
 
 export async function doAiAnalyze() {
@@ -189,14 +225,12 @@ export async function doAiAnalyze() {
 
   runLoader('ai', async () => {
     try {
-      setProgress('aiProgress', 'Формирование промпта…');
-      const prompt = buildAiPrompt();
-      setProgress('aiProgress', 'Отправка в ИИ…');
-      const report = await callOpenAiAnalysis(prompt);
+      setProgress('aiProgress', `Подготовка ${lastPayload.items.length} источников…`);
+      const report = await analyzeAllSources();
       if (!report.trim()) throw new Error('ИИ вернул пустой ответ');
       renderAiReport(report);
       document.getElementById('tabAiBtn').click();
-      showToast('AI-анализ готов');
+      showToast(`AI-анализ готов: обработано ${lastPayload.items.length} источников`);
     } catch (e) {
       showError(e.message || String(e));
       showToast('Ошибка AI-анализа - можно использовать «Скопировать промпт для ChatGPT»');
