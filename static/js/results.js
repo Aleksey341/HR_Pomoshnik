@@ -35,7 +35,15 @@ export function normalizeItems(data) {
   return items;
 }
 
+function ensureSourceIds(items) {
+  return items.map((item, idx) => ({
+    ...item,
+    sourceId: item.sourceId || `S${String(idx + 1).padStart(3, '0')}`
+  }));
+}
+
 export function renderResults(title, items, meta = {}) {
+  items = ensureSourceIds(items);
   document.getElementById('placeholder').style.display = 'none';
   const area = document.getElementById('resultsArea');
   area.style.display = 'block';
@@ -72,20 +80,12 @@ export function renderResults(title, items, meta = {}) {
       hints.push('Проверьте URL каталога, глубину ссылок и фильтры путей.');
       hints.push('1 страница = 1 кредит API. Начните с лимита 25–50.');
     } else if (meta.queryLen > MAX_SEARCH_QUERY) {
-      hints.push(
-        `Запрос ${meta.queryLen} символов — лимит API ${MAX_SEARCH_QUERY}. Сократите до ключевых слов.`
-      );
+      hints.push(`Запрос ${meta.queryLen} символов — лимит API ${MAX_SEARCH_QUERY}. Сократите до ключевых слов.`);
     } else if (meta.queryLen > 120) {
       hints.push('Запрос слишком длинный для поиска — оставьте 5–15 ключевых слов.');
     }
-    if (meta.domainsCount) {
-      hints.push(`Фильтр по ${meta.domainsCount} доменам — убедитесь, что они указаны верно.`);
-    }
-    if (meta.scrape) {
-      hints.push(
-        'Попробуйте снять галочку «Загрузить полный текст (markdown)» слева — иногда так быстрее находятся ссылки.'
-      );
-    }
+    if (meta.domainsCount) hints.push(`Фильтр по ${meta.domainsCount} доменам — убедитесь, что они указаны верно.`);
+    if (meta.scrape) hints.push('Попробуйте снять галочку «Загрузить полный текст (markdown)» слева — иногда так быстрее находятся ссылки.');
     hints.push('Поиск находит страницы в интернете, а не заполняет таблицы по инструкции.');
     list.innerHTML = `<p style="padding:1rem;color:var(--text-muted)">Ничего не найдено.</p>
       <ul style="padding:0 1.25rem 1rem;color:var(--text-muted);font-size:.82rem;line-height:1.6">
@@ -98,12 +98,10 @@ export function renderResults(title, items, meta = {}) {
   list.innerHTML = items
     .map((item, idx) => {
       const md = item.markdown || item.content || '';
-      const body = md
-        ? `<pre>${esc(md)}</pre>`
-        : markdownPlaceholderHtml(meta.mode);
+      const body = md ? `<pre>${esc(md)}</pre>` : markdownPlaceholderHtml(meta.mode);
       return `<article class="result-item${idx === 0 ? ' open' : ''}" data-idx="${idx}">
       <div class="result-item-head">
-        <div class="result-item-title">${esc(item.title || 'Без названия')}</div>
+        <div class="result-item-title">[${esc(item.sourceId)}] ${esc(item.title || 'Без названия')}</div>
         <div class="result-item-url">${esc(item.url || item.sourceURL || '')}</div>
         ${item.searchKeyword ? `<div class="result-item-desc">Ключ: ${esc(item.searchKeyword)}</div>` : ''}
         ${item.description || item.snippet ? `<div class="result-item-desc">${esc(item.description || item.snippet)}</div>` : ''}
@@ -117,7 +115,6 @@ export function renderResults(title, items, meta = {}) {
     head.addEventListener('click', () => head.parentElement.classList.toggle('open'));
   });
   bindEnrichButtons(list);
-
   setLastPayload({ title, items, meta });
 
   if (meta.mode === 'research' && items.length > 0) {
