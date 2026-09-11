@@ -40,6 +40,8 @@ export default async function handler(req, res) {
     named_users_configured: namedUsers,
     server_storage_ready: serverStorageReady,
     usage_ledger_mode: serverStorageReady ? "centralized" : "runtime-fallback",
+    cron_configured: Boolean(process.env.CRON_SECRET),
+    recurring_monitoring_ready: serverStorageReady && Boolean(process.env.CRON_SECRET),
     admin_login_configured: Boolean(process.env.ADMIN_ACCESS_CODE_HASH),
     admin_automation_configured: Boolean(process.env.VERCEL_API_TOKEN),
     vercel_environment: process.env.VERCEL_ENV || null,
