@@ -27,6 +27,15 @@ import {
   showError,
   showToast
 } from './ui.js';
+import {
+  classifyApiFailure,
+  retryDelayMs,
+  shouldRetryRateLimit,
+  waitSeconds,
+} from './retry-policy.js';
+import { refreshUsageQuietly } from './usage.js';
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function updateResearchKeywordCount() {
   const n = parseKeywordInput(document.getElementById('researchKeywords').value).length;
@@ -88,6 +97,33 @@ export function loadSvoTemplate(switchTab = true) {
   if (switchTab) document.querySelector('[data-tab="research"]').click();
 }
 
+async function searchWithAutomaticRetry(body, job, index, total, onWait) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await firecrawlRequest('search', body);
+    } catch (error) {
+      if (!shouldRetryRateLimit(error, attempt, 4)) throw error;
+      const delay = retryDelayMs(error, attempt);
+      attempt += 1;
+      onWait?.(delay, attempt);
+      setProgress(
+        'researchProgress',
+        `Firecrawl ограничил частоту запросов. Ждём ${waitSeconds(delay)} сек., затем автоматически повторим запрос ${index + 1} из ${total}: «${job.label.slice(0, 48)}»…`
+      );
+      await sleep(delay);
+    }
+  }
+}
+
+function failureSummary(counts) {
+  const parts = [];
+  if (counts.rate_limit) parts.push(`${counts.rate_limit} - лимит частоты Firecrawl`);
+  if (counts.credits) parts.push(`${counts.credits} - недостаточно кредитов Firecrawl`);
+  if (counts.other) parts.push(`${counts.other} - другие ошибки API`);
+  return parts.join('; ');
+}
+
 export async function doResearch() {
   if (!getApiKey()) {
     alert('Укажите API-ключ');
@@ -113,9 +149,7 @@ export async function doResearch() {
   }
 
   if (!keywords.length) {
-    alert(
-      'Не найдены ключевые слова. Нажмите «Сформировать запросы» или заполните список вручную.'
-    );
+    alert('Не найдены ключевые слова. Нажмите «Сформировать запросы» или заполните список вручную.');
     return;
   }
 
@@ -139,17 +173,17 @@ export async function doResearch() {
     domains.length && !broad
       ? `\nТолько домены: ${domains.slice(0, 8).join(', ')}${domains.length > 8 ? '…' : ''}`
       : domains.length && broad
-        ? '\n⚠ Включён доп. поиск по всему интернету — будут и другие сайты'
+        ? '\n⚠ Включён доп. поиск по всему интернету - будут и другие сайты'
         : '\nПоиск по всему интернету';
 
   if (kwSlice.length > 20 || jobs.length > 25) {
     const ok = confirm(
-      `Запуск исследования:\n• Ключевых слов: ${kwSlice.length} из ${keywords.length}\n• API-запросов: ${jobs.length}${domainNote}\n\nЭто займёт несколько минут. Продолжить?`
+      `Запуск исследования:\n• Ключевых слов: ${kwSlice.length} из ${keywords.length}\n• API-запросов: ${jobs.length}${domainNote}\n\nПри ограничении Firecrawl исследование автоматически поставит запросы на паузу и продолжит. Это может занять несколько минут. Продолжить?`
     );
     if (!ok) return;
   } else if (domains.length && broad) {
     const ok = confirm(
-      `Включён «Доп. поиск без фильтра доменов» — часть результатов будет с других сайтов, не только: ${domains.slice(0, 5).join(', ')}${domains.length > 5 ? '…' : ''}.\n\nПродолжить?`
+      `Включён «Доп. поиск без фильтра доменов» - часть результатов будет с других сайтов, не только: ${domains.slice(0, 5).join(', ')}${domains.length > 5 ? '…' : ''}.\n\nПродолжить?`
     );
     if (!ok) return;
   }
@@ -160,16 +194,15 @@ export async function doResearch() {
   const allItems = [];
   let queriesRun = 0;
   let errors = 0;
+  let rateLimitWaits = 0;
+  const failures = { rate_limit: 0, credits: 0, other: 0 };
   const t0 = performance.now();
 
   runLoader('research', async () => {
     try {
       for (let i = 0; i < jobs.length; i++) {
         const job = jobs[i];
-        setProgress(
-          'researchProgress',
-          `Запрос ${i + 1} из ${jobs.length}: «${job.label.slice(0, 60)}»…`
-        );
+        setProgress('researchProgress', `Запрос ${i + 1} из ${jobs.length}: «${job.label.slice(0, 60)}»…`);
         try {
           const body = {
             query: job.query.slice(0, MAX_SEARCH_QUERY),
@@ -180,29 +213,28 @@ export async function doResearch() {
             tbs: dateFilter ? buildDateTbs(dateFrom) : undefined
           };
           if (job.includeDomains.length) body.includeDomains = job.includeDomains;
-          const json = await firecrawlRequest('search', body);
+          const json = await searchWithAutomaticRetry(body, job, i, jobs.length, () => {
+            rateLimitWaits += 1;
+          });
           let items = normalizeItems(json.data);
           if (job.domainOnly && job.includeDomains.length) {
-            items = items.filter((it) =>
-              urlMatchesDomains(it.url || it.sourceURL, job.includeDomains)
-            );
+            items = items.filter((it) => urlMatchesDomains(it.url || it.sourceURL, job.includeDomains));
           }
           mergeSearchItems(allItems, items, job.label);
           queriesRun++;
-        } catch (e) {
+        } catch (error) {
           errors++;
-          console.warn('Search failed:', job.label, e);
+          failures[classifyApiFailure(error)] += 1;
+          console.warn('Search failed:', job.label, error);
         }
-        if (i < jobs.length - 1) await new Promise((r) => setTimeout(r, 350));
+        if (i < jobs.length - 1) await sleep(350);
       }
 
       let finalItems = allItems;
       let filteredOut = 0;
       if (domains.length && !broad) {
         const before = finalItems.length;
-        finalItems = finalItems.filter((it) =>
-          urlMatchesDomains(it.url || it.sourceURL, domains)
-        );
+        finalItems = finalItems.filter((it) => urlMatchesDomains(it.url || it.sourceURL, domains));
         filteredOut += before - finalItems.length;
       }
       if (brief) {
@@ -215,6 +247,7 @@ export async function doResearch() {
         ms: Math.round(performance.now() - t0),
         queriesRun,
         errors,
+        rateLimitWaits,
         limit,
         mode: 'research',
         keywordsUsed: kwSlice.length,
@@ -230,19 +263,18 @@ export async function doResearch() {
       });
 
       if (filteredOut > 0) {
-        showError(
-          `Отфильтровано ${filteredOut} нерелевантных ссылок (чужие домены или не по теме задания).`
-        );
+        showError(`Отфильтровано ${filteredOut} нерелевантных ссылок (чужие домены или не по теме задания).`);
       }
       if (errors) {
+        const reasons = failureSummary(failures);
         showError(
-          `Часть запросов завершилась с ошибкой: ${errors} из ${jobs.length}. Проверьте баланс кредитов API.`
+          `Не удалось выполнить ${errors} из ${jobs.length} запросов.${reasons ? ` Причины: ${reasons}.` : ''} Уже собранные ${finalItems.length} источников сохранены в результатах.`
         );
+      } else if (rateLimitWaits) {
+        showToast(`Исследование завершено полностью. Firecrawl ограничивал частоту ${rateLimitWaits} раз, запросы автоматически продолжились после паузы.`);
       }
       if (!finalItems.length) {
-        showError(
-          'Ссылки не найдены. Попробуйте снять фильтр доменов или отключить фильтр по дате.'
-        );
+        showError('Ссылки не найдены. Попробуйте снять фильтр доменов или отключить фильтр по дате.');
       }
     } catch (e) {
       showError(e.message || String(e));
@@ -252,6 +284,7 @@ export async function doResearch() {
       hideLoader('research');
       hideProgress('researchProgress');
       btn.disabled = false;
+      await refreshUsageQuietly();
     }
   });
 }

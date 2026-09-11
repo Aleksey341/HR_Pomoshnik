@@ -29,7 +29,7 @@ function trackCredits(json) {
   if (typeof credits === 'number') {
     totalEstimatedCredits += credits;
     const el = document.getElementById('creditCounter');
-    if (el) el.textContent = `≈ ${totalEstimatedCredits} кред.`;
+    if (el && !el.dataset.managedBalance) el.textContent = `≈ ${totalEstimatedCredits} кред.`;
   }
 }
 
@@ -44,6 +44,46 @@ export function extractApiError(json, status) {
     return json.error.message || JSON.stringify(json.error);
   }
   return `HTTP ${status}`;
+}
+
+function retryAfterSeconds(res) {
+  const raw = String(res.headers.get('retry-after') || '').trim();
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return Math.max(1, Math.ceil(Number(raw)));
+  if (raw) {
+    const when = Date.parse(raw);
+    if (Number.isFinite(when)) return Math.max(1, Math.ceil((when - Date.now()) / 1000));
+  }
+  const reset = Number(res.headers.get('x-ratelimit-reset'));
+  if (Number.isFinite(reset) && reset > 0) {
+    const seconds = reset > 1_000_000_000 ? reset - Date.now() / 1000 : reset;
+    return Math.max(1, Math.ceil(seconds));
+  }
+  return null;
+}
+
+function attachRateLimitMeta(json, res) {
+  if (!json || typeof json !== 'object') return json;
+  const limit = Number(res.headers.get('x-ratelimit-limit'));
+  const remaining = Number(res.headers.get('x-ratelimit-remaining'));
+  const reset = Number(res.headers.get('x-ratelimit-reset'));
+  if ([limit, remaining, reset].some(Number.isFinite)) {
+    json._meta = {
+      ...(json._meta || {}),
+      rate_limit: {
+        limit: Number.isFinite(limit) ? limit : null,
+        remaining: Number.isFinite(remaining) ? remaining : null,
+        reset: Number.isFinite(reset) ? reset : null,
+      },
+    };
+  }
+  return json;
+}
+
+function responseError(json, res) {
+  const error = new Error(extractApiError(json, res.status));
+  error.status = res.status;
+  error.retryAfterSeconds = retryAfterSeconds(res);
+  return error;
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
@@ -73,10 +113,9 @@ async function managedJson(url, options = {}) {
     Authorization: `Bearer ${code}`
   };
   const res = await fetchWithTimeout(url, { ...options, headers });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(extractApiError(json, res.status));
-  if (json.success === false) throw new Error(extractApiError(json, res.status));
-  trackCredits(json);
+  const json = attachRateLimitMeta(await res.json().catch(() => ({})), res);
+  if (!res.ok) throw responseError(json, res);
+  if (json.success === false) throw responseError(json, res);
   return json;
 }
 
@@ -122,9 +161,9 @@ export async function apiPost(path, body) {
     headers,
     body: JSON.stringify({ ...body, apiKey: apiKey || undefined })
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || json.message || `HTTP ${res.status}`);
-  if (json.success === false) throw new Error(json.error || 'Сервис вернул ошибку');
+  const json = attachRateLimitMeta(await res.json().catch(() => ({})), res);
+  if (!res.ok) throw responseError(json, res);
+  if (json.success === false) throw responseError(json, res);
   trackCredits(json);
   return json;
 }
@@ -152,15 +191,15 @@ export async function firecrawlRequest(kind, body) {
     },
     body: JSON.stringify(buildDirectPayload(kind, body))
   });
-  const json = await res.json().catch(() => ({}));
+  const json = attachRateLimitMeta(await res.json().catch(() => ({})), res);
   if (!res.ok) {
-    const msg = extractApiError(json, res.status);
-    if (/cors|failed to fetch|network/i.test(String(msg))) {
+    const error = responseError(json, res);
+    if (/cors|failed to fetch|network/i.test(String(error.message))) {
       throw new Error('Браузер заблокировал запрос. Запустите локально: python server.py');
     }
-    throw new Error(msg);
+    throw error;
   }
-  if (json.success === false) throw new Error(extractApiError(json, res.status));
+  if (json.success === false) throw responseError(json, res);
   return json;
 }
 
@@ -184,9 +223,9 @@ export async function firecrawlGet(pathOrUrl) {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${apiKey}` }
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(extractApiError(json, res.status));
-    if (json.success === false) throw new Error(extractApiError(json, res.status));
+    const json = attachRateLimitMeta(await res.json().catch(() => ({})), res);
+    if (!res.ok) throw responseError(json, res);
+    if (json.success === false) throw responseError(json, res);
     trackCredits(json);
     return json;
   }
@@ -199,9 +238,9 @@ export async function firecrawlGet(pathOrUrl) {
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: 'no-store'
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(extractApiError(json, res.status));
-  if (json.success === false) throw new Error(extractApiError(json, res.status));
+  const json = attachRateLimitMeta(await res.json().catch(() => ({})), res);
+  if (!res.ok) throw responseError(json, res);
+  if (json.success === false) throw responseError(json, res);
   return json;
 }
 
@@ -241,9 +280,9 @@ export async function firecrawlCrawlStart(body) {
     },
     body: JSON.stringify(buildCrawlPayload(body))
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(extractApiError(json, res.status));
-  if (json.success === false) throw new Error(extractApiError(json, res.status));
+  const json = attachRateLimitMeta(await res.json().catch(() => ({})), res);
+  if (!res.ok) throw responseError(json, res);
+  if (json.success === false) throw responseError(json, res);
   return json;
 }
 
@@ -258,8 +297,8 @@ export async function localScrape(body) {
     body: JSON.stringify(body)
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(extractApiError(json, res.status));
-  if (json.success === false) throw new Error(extractApiError(json, res.status));
+  if (!res.ok) throw responseError(json, res);
+  if (json.success === false) throw responseError(json, res);
   return json;
 }
 

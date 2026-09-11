@@ -54,6 +54,7 @@ jobs:
           node --check api/firecrawl/scrape.js
           node --check api/firecrawl/crawl.js
           node --check api/firecrawl/get.js
+          node --check api/firecrawl/credits.js
           node --check api/health.js
           node --check static/js/config.js
           node --check static/js/api.js
@@ -72,12 +73,13 @@ jobs:
           node --check static/js/monitoring.js
           node --check static/js/state.js
           node --check static/js/research.js
+          node --check static/js/retry-policy.js
 
       - name: Verify Node runtime dependencies
         run: node -e "import('@vercel/blob').then(() => console.log('Vercel Blob SDK resolved'))"
 
       - name: Run Node tests
-        run: node --test tests/managed-access.test.mjs tests/evidence-quality.test.mjs
+        run: node --test tests/managed-access.test.mjs tests/evidence-quality.test.mjs tests/rate-limit.test.mjs
 
       - name: Reject committed API secrets
         shell: bash

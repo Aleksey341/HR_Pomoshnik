@@ -188,6 +188,15 @@ export function requireEnv(name, res) {
   return value;
 }
 
+function upstreamHeaders(upstream) {
+  const headers = {};
+  for (const name of ["retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"]) {
+    const value = upstream.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  return headers;
+}
+
 export async function proxyJson({ url, method = "POST", apiKey, body }) {
   const headers = { Authorization: `Bearer ${apiKey}` };
   const options = { method, headers };
@@ -202,12 +211,14 @@ export async function proxyJson({ url, method = "POST", apiKey, body }) {
       status: upstream.status,
       text,
       contentType: upstream.headers.get("content-type") || "application/json",
+      headers: upstreamHeaders(upstream),
     };
   } catch (_error) {
     return {
       status: 502,
       text: JSON.stringify({ error: "Managed service could not reach upstream API" }),
       contentType: "application/json",
+      headers: {},
     };
   }
 }
@@ -215,5 +226,8 @@ export async function proxyJson({ url, method = "POST", apiKey, body }) {
 export function sendProxyResponse(res, result) {
   res.status(result.status);
   res.setHeader("Content-Type", result.contentType || "application/json; charset=utf-8");
+  for (const [name, value] of Object.entries(result.headers || {})) {
+    res.setHeader(name, value);
+  }
   return res.send(result.text);
 }
