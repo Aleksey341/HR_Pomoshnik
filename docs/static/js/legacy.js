@@ -6,6 +6,7 @@ import { copyAiPrompt, doAiAnalyze } from './ai.js';
 import { doCrawl, loadCrawlPresetAuto } from './crawl.js';
 import { copyJson, downloadMarkdown, exportToExcel } from './export.js';
 import { installResearchHistory } from './history.js';
+import { installHrPlaybooks } from './hr-playbooks.js';
 import { getLastPayload } from './state.js';
 import { doScrape, doSearch, initScrapeEngineUI } from './search.js';
 import {
@@ -88,4 +89,5 @@ initResearchKeywordCount();
 initScrapeEngineUI();
 installResearchPlannerButton();
 installResearchHistory();
+installHrPlaybooks();
 checkServer();
