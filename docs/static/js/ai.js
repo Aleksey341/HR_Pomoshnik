@@ -1,35 +1,67 @@
 import { API_BASE, USE_LOCAL_PROXY, getApiRuntime } from './config.js';
 import { extractApiError } from './api.js';
-import { getLastPayload, setLastAiReport } from './state.js';
+import { clearReportVariants, getLastPayload, setLastAiReport, setLastQuality } from './state.js';
 import { getApiKey, getOpenAiKey, saveOpenAiKey } from './storage.js';
 import { hideError, hideLoader, hideProgress, runLoader, setProgress, showError, showToast } from './ui.js';
 import { updateResultsViewForTab } from './results.js';
 import { renderMarkdownSafe } from './markdown.js';
+import { calculateEvidenceScore } from './quality.js';
 
 const MAX_BATCHES = 8;
 const BATCH_CONTEXT_CHARS = 30_000;
 const COPY_CONTEXT_CHARS = 120_000;
 
-export function renderAiReport(text) {
+function qualityHtml(quality) {
+  const metrics = [
+    ['Цитирование фактов', quality.metrics.citation],
+    ['Покрытие источников', quality.metrics.coverage],
+    ['Разнообразие доменов', quality.metrics.diversity],
+    ['Полные тексты', quality.metrics.fullText],
+    ['Корректность Source ID', quality.metrics.validity],
+    ['Перекрёстное подтверждение', quality.metrics.corroboration],
+  ];
+  return `
+    <section class="evidence-score-card">
+      <div class="evidence-score-main">
+        <div class="evidence-score-number">${quality.score}</div>
+        <div><strong>Evidence Score / 100</strong><div class="hint">Качество доказательной базы: ${quality.level}</div></div>
+      </div>
+      <div class="evidence-metrics">
+        ${metrics.map(([label, value]) => `<div class="evidence-metric"><span>${label}</span><strong>${value}%</strong><div class="usage-bar"><span style="width:${value}%"></span></div></div>`).join('')}
+      </div>
+      <div class="evidence-facts">
+        <span>Фактических тезисов: <strong>${quality.factualClaims}</strong></span>
+        <span>С Source ID: <strong>${quality.citedClaims}</strong></span>
+        <span>Источников в доказательствах: <strong>${quality.evidenceSources}/${quality.sourceCount}</strong></span>
+        <span>Доменов: <strong>${quality.domainCount}</strong></span>
+      </div>
+      ${quality.warnings.length ? `<details class="evidence-warnings"><summary>Что требует проверки (${quality.warnings.length})</summary><ul>${quality.warnings.map((item) => `<li>${item}</li>`).join('')}</ul></details>` : '<div class="evidence-ok">Критических замечаний к доказательной базе не найдено.</div>'}
+    </section>`;
+}
+
+export function renderAiReport(text, options = {}) {
   setLastAiReport(text);
   const payload = getLastPayload();
   const sourceCount = payload?.items?.length || 0;
   const evidenceCount = new Set(String(text || '').match(/S\d{3,}/g) || []).size;
   const generatedAt = new Date().toLocaleString('ru-RU');
+  const quality = calculateEvidenceScore(payload, text);
+  if (!options.preserveQuality) setLastQuality(quality);
 
   document.getElementById('placeholder').style.display = 'none';
   document.getElementById('resultsArea').style.display = 'block';
-  document.getElementById('resultsTitle').textContent = 'AI-анализ и рекомендации';
+  document.getElementById('resultsTitle').textContent = options.resultsTitle || 'AI-анализ и рекомендации';
   document.getElementById('aiResultsArea').innerHTML = `
     <section class="ai-report-hero">
-      <div class="ai-report-kicker">HR ПОМОЩНИК · EVIDENCE REPORT</div>
-      <h2>Итоговый аналитический отчёт</h2>
+      <div class="ai-report-kicker">${options.kicker || 'HR ПОМОЩНИК · EVIDENCE REPORT'}</div>
+      <h2>${options.title || 'Итоговый аналитический отчёт'}</h2>
       <div class="ai-report-meta">
         <span>Источников: <strong>${sourceCount}</strong></span>
         <span>Использовано ID: <strong>${evidenceCount}</strong></span>
         <span>Сформирован: <strong>${generatedAt}</strong></span>
       </div>
     </section>
+    ${qualityHtml(quality)}
     <section class="ai-report-body">${renderMarkdownSafe(text)}</section>`;
   updateResultsViewForTab('ai');
 }
@@ -217,6 +249,7 @@ export async function doAiAnalyze() {
       setProgress('aiProgress', `Подготовка ${lastPayload.items.length} источников…`);
       const report = await analyzeAllSources();
       if (!report.trim()) throw new Error('ИИ вернул пустой ответ');
+      clearReportVariants();
       renderAiReport(report);
       document.getElementById('tabAiBtn').click();
       showToast(`AI-анализ готов: обработано ${lastPayload.items.length} источников`);
