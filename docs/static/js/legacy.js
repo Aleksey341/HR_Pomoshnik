@@ -7,6 +7,7 @@ import { doCrawl, loadCrawlPresetAuto } from './crawl.js';
 import { copyJson, downloadMarkdown, exportToExcel } from './export.js';
 import { installResearchHistory } from './history.js';
 import { installHrPlaybooks } from './hr-playbooks.js';
+import { installReportFormats } from './report-formats.js';
 import { getLastPayload } from './state.js';
 import { doScrape, doSearch, initScrapeEngineUI } from './search.js';
 import {
@@ -90,4 +91,5 @@ initScrapeEngineUI();
 installResearchPlannerButton();
 installResearchHistory();
 installHrPlaybooks();
+installReportFormats();
 checkServer();
