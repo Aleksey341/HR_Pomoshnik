@@ -2,6 +2,9 @@ import crypto from "node:crypto";
 
 export const FIRECRAWL_API = "https://api.firecrawl.dev/v2";
 
+const RATE_BUCKETS = globalThis.__HR_POMOSHNIK_RATE_BUCKETS__ || new Map();
+globalThis.__HR_POMOSHNIK_RATE_BUCKETS__ = RATE_BUCKETS;
+
 function sha256(value) {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -100,6 +103,80 @@ export function requireManagedAccess(req, res) {
   }
   req.hrPomoshnikUser = user;
   return true;
+}
+
+export function enforceRateLimit(req, res, bucket, limit, windowMs = 60_000) {
+  const user = String(req.hrPomoshnikUser || "anonymous");
+  const key = `${bucket}:${user}`;
+  const now = Date.now();
+  const cutoff = now - windowMs;
+  const previous = RATE_BUCKETS.get(key) || [];
+  const recent = previous.filter((ts) => ts > cutoff);
+  if (recent.length >= limit) {
+    const retryMs = Math.max(1000, windowMs - (now - recent[0]));
+    res.setHeader("Retry-After", String(Math.ceil(retryMs / 1000)));
+    res.status(429).json({ error: "Слишком много запросов. Повторите позже." });
+    RATE_BUCKETS.set(key, recent);
+    return false;
+  }
+  recent.push(now);
+  RATE_BUCKETS.set(key, recent);
+  return true;
+}
+
+function clampInt(value, fallback, min, max) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(n, max));
+}
+
+function cleanStringList(value, maxItems, maxLength) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(0, maxItems)
+    .map((item) => String(item || "").trim().slice(0, maxLength))
+    .filter(Boolean);
+}
+
+export function sanitizeFirecrawlBody(kind, incoming) {
+  const body = incoming && typeof incoming === "object" ? incoming : {};
+
+  if (kind === "search") {
+    const out = {
+      query: String(body.query || "").trim().slice(0, 500),
+      limit: clampInt(body.limit, 5, 1, 50),
+    };
+    const includeDomains = cleanStringList(body.includeDomains, 20, 255);
+    if (includeDomains.length) out.includeDomains = includeDomains;
+    if (body.tbs) out.tbs = String(body.tbs).slice(0, 200);
+    if (Array.isArray(body.sources)) out.sources = body.sources.slice(0, 3);
+    if (body.scrapeOptions) out.scrapeOptions = { formats: ["markdown"] };
+    return out;
+  }
+
+  if (kind === "scrape") {
+    return {
+      url: String(body.url || "").trim().slice(0, 4096),
+      formats: cleanStringList(body.formats, 3, 32).filter((x) => ["markdown", "links", "html"].includes(x)),
+    };
+  }
+
+  if (kind === "crawl") {
+    const out = {
+      url: String(body.url || "").trim().slice(0, 4096),
+      limit: clampInt(body.limit, 50, 1, 100),
+      maxDiscoveryDepth: clampInt(body.maxDiscoveryDepth, 3, 1, 6),
+      crawlEntireDomain: Boolean(body.crawlEntireDomain),
+    };
+    const includePaths = cleanStringList(body.includePaths, 50, 500);
+    const excludePaths = cleanStringList(body.excludePaths, 50, 500);
+    if (includePaths.length) out.includePaths = includePaths;
+    if (excludePaths.length) out.excludePaths = excludePaths;
+    if (body.scrapeOptions) out.scrapeOptions = { formats: ["markdown"] };
+    return out;
+  }
+
+  return {};
 }
 
 export function requireEnv(name, res) {
