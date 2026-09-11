@@ -1,4 +1,5 @@
 import { applyCors, handlePreflight } from "./_lib/managed.js";
+import { probePrivateStore } from "./_lib/blob-store.js";
 
 function configuredUserCount() {
   const raw = String(process.env.MANAGED_ACCESS_USERS_JSON || "").trim();
@@ -27,6 +28,7 @@ export default async function handler(req, res) {
 
   const namedUsers = configuredUserCount();
   const legacyConfigured = Boolean(process.env.MANAGED_ACCESS_CODE_HASHES);
+  const serverStorageReady = await probePrivateStore();
 
   return res.status(200).json({
     ok: true,
@@ -36,6 +38,8 @@ export default async function handler(req, res) {
     openai_model_configured: Boolean(process.env.OPENAI_MODEL),
     access_codes_configured: namedUsers > 0 || legacyConfigured,
     named_users_configured: namedUsers,
+    server_storage_ready: serverStorageReady,
+    usage_ledger_mode: serverStorageReady ? "centralized" : "runtime-fallback",
     admin_login_configured: Boolean(process.env.ADMIN_ACCESS_CODE_HASH),
     admin_automation_configured: Boolean(process.env.VERCEL_API_TOKEN),
     vercel_environment: process.env.VERCEL_ENV || null,
