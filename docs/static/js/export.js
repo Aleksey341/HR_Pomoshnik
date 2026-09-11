@@ -8,13 +8,17 @@ function cellText(value, max = 32000) {
   return text.length > max ? text.slice(0, max) + '… [обрезано для Excel]' : text;
 }
 
+function itemSourceId(item, index) {
+  return item.sourceId || `S${String(index + 1).padStart(3, '0')}`;
+}
+
 export function buildMarkdownExport() {
   const lastPayload = getLastPayload();
   if (!lastPayload?.items?.length) return '';
   return lastPayload.items
     .map(
       (it, i) =>
-        `# ${i + 1}. ${it.title || it.url || 'Без названия'}\n${it.url || it.sourceURL || ''}\n\n${it.markdown || it.content || it.description || '_нет текста_'}`
+        `# [${itemSourceId(it, i)}] ${it.title || it.url || 'Без названия'}\n${it.url || it.sourceURL || ''}\n\n${it.markdown || it.content || it.description || '_нет текста_'}`
     )
     .join('\n\n---\n\n');
 }
@@ -60,9 +64,7 @@ export function downloadMarkdown() {
     return;
   }
   const md = buildMarkdownExport();
-  const hasText = lastPayload.items.some(
-    (i) => String(i.markdown || i.content || '').trim().length > 0
-  );
+  const hasText = lastPayload.items.some((i) => String(i.markdown || i.content || '').trim().length > 0);
   if (!hasText) {
     showToast('Markdown пуст — включите «Markdown каждой страницы» при обходе');
     return;
@@ -89,13 +91,11 @@ export function exportToExcel() {
 
   const rows = isCrawl
     ? [
-        ['№', 'Госномер', 'Заголовок', 'URL', 'Описание', 'Текст (markdown)', 'Дата выгрузки'],
+        ['Source ID', '№', 'Госномер', 'Заголовок', 'URL', 'Описание', 'Текст (markdown)', 'Дата выгрузки'],
         ...lastPayload.items.map((it, i) => [
+          itemSourceId(it, i),
           i + 1,
-          cellText(
-            (it.plates || extractPlateNumbers(`${it.title}\n${it.markdown}`)).join(', '),
-            100
-          ),
+          cellText((it.plates || extractPlateNumbers(`${it.title}\n${it.markdown}`)).join(', '), 100),
           cellText(it.title || 'Без названия', 500),
           cellText(it.url || it.sourceURL || '', 2000),
           cellText(it.description || it.snippet || '', 2000),
@@ -104,8 +104,9 @@ export function exportToExcel() {
         ])
       ]
     : [
-        ['№', 'Ключевой запрос', 'Заголовок', 'URL', 'Описание', 'Текст (markdown)', 'Дата выгрузки'],
+        ['Source ID', '№', 'Ключевой запрос', 'Заголовок', 'URL', 'Описание', 'Текст (markdown)', 'Дата выгрузки'],
         ...lastPayload.items.map((it, i) => [
+          itemSourceId(it, i),
           i + 1,
           cellText(it.searchKeyword || '', 200),
           cellText(it.title || 'Без названия', 500),
@@ -118,8 +119,8 @@ export function exportToExcel() {
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = isCrawl
-    ? [{ wch: 5 }, { wch: 14 }, { wch: 42 }, { wch: 48 }, { wch: 50 }, { wch: 90 }, { wch: 18 }]
-    : [{ wch: 5 }, { wch: 28 }, { wch: 42 }, { wch: 48 }, { wch: 50 }, { wch: 90 }, { wch: 18 }];
+    ? [{ wch: 11 }, { wch: 5 }, { wch: 14 }, { wch: 42 }, { wch: 48 }, { wch: 50 }, { wch: 90 }, { wch: 18 }]
+    : [{ wch: 11 }, { wch: 5 }, { wch: 28 }, { wch: 42 }, { wch: 48 }, { wch: 50 }, { wch: 90 }, { wch: 18 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, isCrawl ? 'Страницы' : 'Ссылки');
@@ -149,6 +150,14 @@ export function exportToExcel() {
     XLSX.utils.book_append_sheet(wb, wsTemplate, 'Практики_36_колонок');
   }
 
+  const sourceRegister = [
+    ['Source ID', 'Заголовок', 'URL'],
+    ...lastPayload.items.map((it, i) => [itemSourceId(it, i), it.title || '', it.url || it.sourceURL || ''])
+  ];
+  const wsSources = XLSX.utils.aoa_to_sheet(sourceRegister);
+  wsSources['!cols'] = [{ wch: 11 }, { wch: 50 }, { wch: 70 }];
+  XLSX.utils.book_append_sheet(wb, wsSources, 'Источники');
+
   const infoRows = [
     ['Параметр', 'Значение'],
     ['Источник запроса', lastPayload.title || ''],
@@ -159,14 +168,10 @@ export function exportToExcel() {
     ['Лимит страниц', lastPayload.meta?.limit ?? ''],
     ['Время ответа, мс', lastPayload.meta?.ms ?? ''],
     ['Дата выгрузки', exportedAt],
-    [
-      'Примечание',
-      isCrawl ? 'Обход каталога по ссылкам' : 'Колонки 1–36 заполняются вручную или через AI'
-    ]
+    ['Примечание', isCrawl ? 'Обход каталога по ссылкам' : 'Source ID используется для связи выводов AI с первоисточниками']
   ];
   const wsInfo = XLSX.utils.aoa_to_sheet(infoRows);
   wsInfo['!cols'] = [{ wch: 22 }, { wch: 60 }];
-
   XLSX.utils.book_append_sheet(wb, wsInfo, 'Сводка');
 
   const safeName = (lastPayload.title || 'firecrawl').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
