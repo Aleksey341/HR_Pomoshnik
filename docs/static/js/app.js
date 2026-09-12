@@ -2,16 +2,22 @@ import { initStorage } from './storage.js';
 import { abortActiveRequest } from './api.js';
 import { getApiRuntime } from './config.js';
 import { installUsageDashboard, refreshUsageQuietly } from './usage.js';
+import { installFriendlyUi } from './friendly-ui.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
 
-function ensureFeatureStyles() {
-  if (document.getElementById('researchSuiteStyles')) return;
+function ensureStylesheet(id, path) {
+  if (document.getElementById(id)) return;
   const link = document.createElement('link');
-  link.id = 'researchSuiteStyles';
+  link.id = id;
   link.rel = 'stylesheet';
-  link.href = new URL('static/css/research-suite.css', document.baseURI).href;
+  link.href = new URL(path, document.baseURI).href;
   document.head.append(link);
+}
+
+function ensureFeatureStyles() {
+  ensureStylesheet('researchSuiteStyles', 'static/css/research-suite.css');
+  ensureStylesheet('friendlyUiStyles', 'static/css/friendly-ui.css');
 }
 
 function capSelect(id, maxValue) {
@@ -42,7 +48,7 @@ function installAccessCheck(runtime, apiField, apiInput) {
   button.className = 'btn-sm';
   button.style.marginTop = '.5rem';
   button.style.width = '100%';
-  button.textContent = 'Проверить доступ';
+  button.textContent = 'Войти';
 
   const status = document.createElement('p');
   status.id = 'accessCheckStatus';
@@ -52,11 +58,13 @@ function installAccessCheck(runtime, apiField, apiInput) {
   button.addEventListener('click', async () => {
     const code = apiInput.value.trim();
     if (!code) {
-      status.textContent = 'Введите код доступа HRP-...';
+      status.textContent = 'Введите персональный код доступа HRP.';
+      window.dispatchEvent(new CustomEvent('hrp:access-rejected'));
       return;
     }
     button.disabled = true;
-    status.textContent = 'Проверка доступа…';
+    button.textContent = 'Проверяем…';
+    status.textContent = 'Проверяем доступ…';
     try {
       const res = await fetch(`${runtime.base}/access/check`, {
         cache: 'no-store',
@@ -64,12 +72,15 @@ function installAccessCheck(runtime, apiField, apiInput) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      status.textContent = `Доступ подтверждён: ${data.user || 'пользователь'}`;
+      status.textContent = `Доступ подтверждён${data.user ? `: ${data.user}` : ''}`;
+      window.dispatchEvent(new CustomEvent('hrp:access-verified', { detail: { user: data.user || '' } }));
       await refreshUsageQuietly(code);
     } catch (err) {
-      status.textContent = `Доступ не подтверждён: ${err.message || err}`;
+      status.textContent = `Не удалось войти: ${err.message || err}`;
+      window.dispatchEvent(new CustomEvent('hrp:access-rejected'));
     } finally {
       button.disabled = false;
+      button.textContent = 'Войти';
     }
   });
 
@@ -122,22 +133,24 @@ async function applyRuntimeUi() {
       apiInput.placeholder = 'HRP-xxxxxxxx';
       apiInput.setAttribute('data-tip', 'Введите персональный код доступа, выданный администратором');
     }
-    if (apiHint) apiHint.textContent = 'Один код используется для поиска, парсинга и AI-анализа. Серверные API-ключи пользователю не выдаются.';
+    if (apiHint) apiHint.textContent = 'Для работы нужен только персональный код HRP. Дополнительные API-ключи и настройки не требуются.';
     if (rememberLabel) {
       const checkbox = document.getElementById('rememberKeys');
       rememberLabel.textContent = '';
       if (checkbox) rememberLabel.append(checkbox, document.createTextNode(' Запомнить код доступа в этой вкладке'));
     }
     if (openAiField) openAiField.style.display = 'none';
-    if (aiPanelHint) aiPanelHint.textContent = 'AI-анализ доступен после поиска, исследования или парсинга URL. Большие исследования разбиваются на пакеты и анализируются целиком. OpenAI API-ключ хранится только на сервере.';
-    if (aiButton) aiButton.setAttribute('data-tip', 'Проанализирует все собранные источники пакетами и сформирует evidence-отчёт');
+    if (aiPanelHint) aiPanelHint.textContent = 'Используйте уже собранные материалы. HR Помощник проанализирует источники, сформирует выводы и сохранит ссылки на доказательства.';
+    if (aiButton) aiButton.setAttribute('data-tip', 'Проанализирует собранные источники и сформирует evidence-отчёт');
     if (aiCopyButton) aiCopyButton.setAttribute('data-tip', 'Скопирует сформированный промпт и собранные материалы для использования в ChatGPT');
-    if (heroLead) heroLead.textContent = 'Введите код доступа, соберите материалы, постройте AI-план исследования и получите доказательный отчёт со ссылками на источники.';
-    if (banner) banner.textContent = 'Защищённый режим: используйте персональный код HRP. OpenAI и Firecrawl API-ключи хранятся только на сервере.';
+    if (heroLead) heroLead.textContent = 'Выберите задачу: провести исследование, найти информацию или получить выводы по собранным материалам.';
+    if (banner) banner.textContent = 'Защищённый режим: для работы нужен только персональный код доступа HRP.';
     installAccessCheck(runtime, apiField, apiInput);
     installAiNavigation();
     installUsageDashboard();
   }
+
+  return runtime;
 }
 
 async function loadLegacy() {
@@ -163,7 +176,8 @@ async function bootstrap() {
   }
 
   try {
-    await applyRuntimeUi();
+    const runtime = await applyRuntimeUi();
+    installFriendlyUi(runtime);
   } catch (err) {
     console.warn('Runtime UI config after legacy:', err);
   }
