@@ -60,6 +60,7 @@ jobs:
           node --check static/js/api.js
           node --check static/js/ai.js
           node --check static/js/app.js
+          node --check static/js/friendly-ui.js
           node --check static/js/results.js
           node --check static/js/export.js
           node --check static/js/legacy.js
