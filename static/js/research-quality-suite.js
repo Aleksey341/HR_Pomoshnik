@@ -85,9 +85,10 @@ async function auditReport(report, payload) {
   const items = payload?.items || [];
   const brief = payload?.meta?.researchBrief || document.getElementById('researchBrief')?.value?.trim() || '';
   const sourceContext = compactSourceContext(items, report);
+  const processMode = payload?.meta?.mode === 'process-improvement';
   const raw = await callOpenAiAnalysis({
     system: 'Ты независимый аудитор доказательных исследований. Проверяй отчёт только по переданным источникам. Верни только JSON без markdown.',
-    user: `Проверь точность и полноту HR-исследования.\n\nИсходная задача:\n${brief || 'Не указана'}\n\nОтчёт:\n${stripSourceRegister(report)}\n\nИсточники для проверки:\n${sourceContext}\n\nВерни JSON строго этой структуры:\n{\n  "coverage": [{"id":"Q01","question":"исследовательский вопрос","status":"covered|partial|missing","source_ids":["S001"],"note":"пояснение"}],\n  "claims": [{"claim":"существенный тезис или цифра","status":"confirmed|partial|unsupported|conflict","numeric":true,"source_ids":["S001"],"note":"что подтверждает или не подтверждает"}],\n  "contradictions": [{"topic":"тема расхождения","source_ids":["S001","S002"],"note":"в чём расходятся данные"}],\n  "missing_queries": ["поисковый запрос для закрытия конкретного пробела"],\n  "source_assessment": [{"source_id":"S001","type":"official|corporate|research|labour_market|professional_research|media|social|other","label":"понятный тип источника","reliability":0,"primary":0,"note":"краткая оценка"}]\n}\n\nПравила:\n1. Выдели 6-12 исследовательских вопросов из задачи и проверь покрытие каждого.\n2. Проверь все существенные числовые утверждения и до 25 наиболее важных фактических тезисов.\n3. Ставь confirmed только когда источник прямо подтверждает утверждение.\n4. Не считай интерпретацию доказанным фактом.\n5. Если источники противоречат друг другу, фиксируй conflict и contradiction.\n6. Для partial/missing сформируй конкретные поисковые запросы, максимум 6.\n7. Оцени надёжность и первичность источников от 0 до 100.\n8. Не придумывай Source ID.`
+    user: `Проверь точность и полноту ${processMode ? 'исследования и аудита HR-процесса' : 'HR-исследования'}.\n\nИсходная задача:\n${brief || 'Не указана'}\n\nОтчёт:\n${stripSourceRegister(report)}\n\nИсточники для проверки:\n${sourceContext}\n\nВерни JSON строго этой структуры:\n{\n  "coverage": [{"id":"Q01","question":"исследовательский вопрос","status":"covered|partial|missing","source_ids":["S001"],"note":"пояснение"}],\n  "claims": [{"claim":"существенный тезис или цифра","status":"confirmed|partial|unsupported|conflict","numeric":true,"source_ids":["S001"],"note":"что подтверждает или не подтверждает"}],\n  "contradictions": [{"topic":"тема расхождения","source_ids":["S001","S002"],"note":"в чём расходятся данные"}],\n  "missing_queries": ["поисковый запрос для закрытия конкретного пробела"],\n  "source_assessment": [{"source_id":"S001","type":"official|corporate|research|labour_market|professional_research|media|social|other","label":"понятный тип источника","reliability":0,"primary":0,"note":"краткая оценка"}]\n}\n\nПравила:\n1. Выдели 6-12 исследовательских вопросов из задачи и проверь покрытие каждого.\n2. Проверь все существенные числовые утверждения и до 25 наиболее важных фактических тезисов.\n3. Ставь confirmed только когда источник прямо подтверждает утверждение.\n4. Не считай интерпретацию доказанным фактом.\n5. Если источники противоречат друг другу, фиксируй conflict и contradiction.\n6. Для partial/missing сформируй конкретные поисковые запросы, максимум 6.\n7. Оцени надёжность и первичность источников от 0 до 100.\n8. Не придумывай Source ID.\n${processMode ? '9. Описание AS-IS, сообщённое пользователем, не требует внешнего Source ID. Проверяй источниками только внешние практики, benchmarks и фактические утверждения о других компаниях.' : ''}`
   }, 3600);
   return sanitizeResearchAudit(extractJson(raw), payload);
 }
@@ -128,6 +129,7 @@ async function findMissingEvidence(queries, maxQueries = AUTO_GAP_QUERIES) {
   let added = 0;
   let failures = 0;
   const dateFrom = payload.meta?.dateFrom || '';
+  const processMode = payload.meta?.mode === 'process-improvement';
 
   for (let index = 0; index < selected.length; index++) {
     const query = selected[index];
@@ -137,7 +139,7 @@ async function findMissingEvidence(queries, maxQueries = AUTO_GAP_QUERIES) {
         query: query.slice(0, MAX_SEARCH_QUERY),
         limit: GAP_RESULTS_PER_QUERY,
         scrape: true,
-        lang: 'ru',
+        lang: processMode ? undefined : 'ru',
         sources: ['web'],
         tbs: dateFrom ? buildDateTbs(dateFrom) : undefined,
       };
@@ -173,11 +175,18 @@ async function findMissingEvidence(queries, maxQueries = AUTO_GAP_QUERIES) {
 }
 
 async function resynthesizeAfterGap() {
+  const payload = getLastPayload();
   const prompt = buildAiPrompt();
+  const processMode = payload?.meta?.mode === 'process-improvement';
+  const processInstruction = processMode
+    ? `\n\nЭто аудит HR-процесса «${payload.meta?.processName || ''}». Сохрани структуру Process Excellence отчёта: AS-IS, SIPOC, Muda, риски/5 Why, внешние практики, Gap Analysis, что убрать/упростить, матрица инструментов, TO-BE, RACI, KPI, зрелость, Quick Wins, дорожная карта и эффект. При выборе технологий соблюдай порядок: убрать → упростить → объединить → стандартизировать → интегрировать → автоматизировать → RPA → AI. Не предлагай AI или робота без обоснования.`
+    : '';
   const report = await callOpenAiAnalysis({
-    system: 'Ты ведущий аналитик доказательного HR-исследования. Пересобери отчёт после дополнительного поиска, не теряя Source ID и не придумывая факты.',
-    user: `${prompt.user}\n\nДополнительные требования:\n- используй новые источники только когда они действительно подтверждают вывод;\n- для каждой важной цифры обязательно укажи Source ID;\n- явно разделяй подтверждённые факты, интерпретации и рекомендации;\n- противоречия не скрывай;\n- добавь раздел «Что не удалось подтвердить», если пробелы остались.`
-  }, 5200);
+    system: processMode
+      ? 'Ты ведущий консультант по HR Process Excellence и доказательным исследованиям. Пересобери аудит процесса после дополнительного поиска, сохрани Source ID.'
+      : 'Ты ведущий аналитик доказательного HR-исследования. Пересобери отчёт после дополнительного поиска, не теряя Source ID и не придумывая факты.',
+    user: `${prompt.user}${processInstruction}\n\nДополнительные требования:\n- используй новые источники только когда они действительно подтверждают вывод;\n- для каждой важной цифры обязательно укажи Source ID;\n- явно разделяй подтверждённые факты, интерпретации и рекомендации;\n- противоречия не скрывай;\n- добавь раздел «Что не удалось подтвердить», если пробелы остались.`
+  }, 5400);
   return stripSourceRegister(report) + buildSourceRegister(getLastPayload()?.items || []);
 }
 
@@ -187,9 +196,10 @@ async function correctReportWithAudit(report, audit) {
     claims: audit.claims,
     contradictions: audit.contradictions,
   });
+  const processMode = getLastPayload()?.meta?.mode === 'process-improvement';
   const corrected = await callOpenAiAnalysis({
     system: 'Ты редактор-фактчекер. Исправь аналитический отчёт строго по результатам независимой проверки. Не добавляй новых фактов.',
-    user: `Отчёт:\n${stripSourceRegister(report)}\n\nРезультаты проверки:\n${compactAudit}\n\nИсправь отчёт на русском в markdown.\nПравила:\n1. Удали неподтверждённые утверждения или прямо пометь их как неподтверждённые.\n2. Частично подтверждённые тезисы сформулируй осторожнее.\n3. Числа сохраняй только если проверка подтверждает их источником.\n4. Не меняй существующие Source ID на выдуманные.\n5. Противоречащие данные покажи как расхождение, а не выбирай одну цифру без основания.\n6. Отделяй факты от интерпретаций и рекомендаций.\n7. В конце добавь «Что не удалось подтвердить» и «Противоречия», если такие пункты есть.\n8. Не добавляй реестр источников - он будет добавлен автоматически.`
+    user: `Отчёт:\n${stripSourceRegister(report)}\n\nРезультаты проверки:\n${compactAudit}\n\nИсправь отчёт на русском в markdown.\nПравила:\n1. Удали неподтверждённые утверждения или прямо пометь их как неподтверждённые.\n2. Частично подтверждённые тезисы сформулируй осторожнее.\n3. Числа сохраняй только если проверка подтверждает их источником.\n4. Не меняй существующие Source ID на выдуманные.\n5. Противоречащие данные покажи как расхождение, а не выбирай одну цифру без основания.\n6. Отделяй факты от интерпретаций и рекомендаций.\n7. В конце добавь «Что не удалось подтвердить» и «Противоречия», если такие пункты есть.\n8. Не добавляй реестр источников - он будет добавлен автоматически.\n${processMode ? '9. Сохрани структуру аудита HR-процесса, матрицу инструментов и TO-BE. Не удаляй рекомендации только потому, что они являются рекомендациями, но не выдавай их за подтверждённые внешние факты.' : ''}`
   }, 5200);
   return stripSourceRegister(corrected) + buildSourceRegister(getLastPayload()?.items || []);
 }
@@ -262,13 +272,14 @@ async function finalizeQuality(report, audit) {
   const evidence = calculateEvidenceScore(payload, report);
   const quality = computeResearchQuality({ payload, evidence, audit });
   setLastQuality(quality);
+  const processMode = payload?.meta?.mode === 'process-improvement';
   running = true;
   try {
     renderAiReport(report, {
       preserveQuality: true,
-      resultsTitle: 'Проверенный AI-отчёт',
-      kicker: 'HR ПОМОЩНИК · VERIFIED RESEARCH',
-      title: 'Итоговый отчёт после проверки точности и полноты',
+      resultsTitle: processMode ? 'Проверенный аудит HR-процесса' : 'Проверенный AI-отчёт',
+      kicker: processMode ? 'HR ПОМОЩНИК · VERIFIED PROCESS EXCELLENCE' : 'HR ПОМОЩНИК · VERIFIED RESEARCH',
+      title: processMode ? `Проверенный аудит и TO-BE: ${payload.meta?.processName || 'HR-процесс'}` : 'Итоговый отчёт после проверки точности и полноты',
     });
     renderResearchQuality(quality);
   } finally {
@@ -279,9 +290,9 @@ async function finalizeQuality(report, audit) {
 }
 
 async function runAuditPipeline(initialReport, allowAutoGap = true) {
-  if (running || !initialReport) return;
+  if (running || !initialReport) return null;
   const payload = getLastPayload();
-  if (!payload?.items?.length || payload.meta?.mode !== 'research') return;
+  if (!payload?.items?.length || !['research', 'process-improvement'].includes(payload.meta?.mode)) return null;
   running = true;
   try {
     setProgress('aiProgress', 'Проверяем полноту исследования, факты и числовые утверждения…');
@@ -306,13 +317,19 @@ async function runAuditPipeline(initialReport, allowAutoGap = true) {
     report = await correctReportWithAudit(report, audit);
     const quality = await finalizeQuality(report, audit);
     showToast(`Research Quality: ${quality.score}/100. Проверка точности и полноты завершена.`);
+    return quality;
   } catch (error) {
     console.warn('Research quality audit failed:', error);
     showToast(`Отчёт готов, но дополнительная проверка не завершена: ${error.message || error}`);
+    return null;
   } finally {
     running = false;
     hideProgress('aiProgress');
   }
+}
+
+export async function runResearchQualityAudit(report, allowAutoGap = true) {
+  return runAuditPipeline(report, allowAutoGap);
 }
 
 async function enhanceFromMissingQueries(auto = false) {
