@@ -3,6 +3,7 @@ import { abortActiveRequest } from './api.js';
 import { getApiRuntime } from './config.js';
 import { installUsageDashboard, refreshUsageQuietly } from './usage.js';
 import { installFriendlyUi } from './friendly-ui.js';
+import { installProcessImprovement } from './process-improvement.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
 
@@ -19,6 +20,7 @@ function ensureFeatureStyles() {
   ensureStylesheet('researchSuiteStyles', 'static/css/research-suite.css');
   ensureStylesheet('friendlyUiStyles', 'static/css/friendly-ui.css');
   ensureStylesheet('researchQualityStyles', 'static/css/research-quality.css');
+  ensureStylesheet('processImprovementStyles', 'static/css/process-improvement.css');
 }
 
 function capSelect(id, maxValue) {
@@ -179,6 +181,7 @@ async function bootstrap() {
   try {
     const runtime = await applyRuntimeUi();
     installFriendlyUi(runtime);
+    installProcessImprovement();
   } catch (err) {
     console.warn('Runtime UI config after legacy:', err);
   }
