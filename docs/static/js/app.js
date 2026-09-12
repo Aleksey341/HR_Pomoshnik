@@ -18,6 +18,7 @@ function ensureStylesheet(id, path) {
 function ensureFeatureStyles() {
   ensureStylesheet('researchSuiteStyles', 'static/css/research-suite.css');
   ensureStylesheet('friendlyUiStyles', 'static/css/friendly-ui.css');
+  ensureStylesheet('researchQualityStyles', 'static/css/research-quality.css');
 }
 
 function capSelect(id, maxValue) {
