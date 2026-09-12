@@ -20,6 +20,7 @@ import {
   doResearch
 } from './research.js';
 import { installResearchPlannerButton } from './research-planner.js';
+import { installResearchQualitySuite } from './research-quality-suite.js';
 import { updateResultsViewForTab } from './results.js';
 import { loadOpenAiKey, saveApiKey, saveOpenAiKey } from './storage.js';
 import { showToast } from './ui.js';
@@ -94,4 +95,5 @@ installResearchHistory();
 installHrPlaybooks();
 installReportFormats();
 installMonitoring();
+installResearchQualitySuite();
 checkServer();
