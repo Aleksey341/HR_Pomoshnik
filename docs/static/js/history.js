@@ -145,7 +145,8 @@ function restoreEntry(entry, locationLabel) {
   setLastQuality(entry.quality || null);
   renderResults(entry.payload.title, entry.payload.items, entry.payload.meta || {});
   if (entry.aiReport) {
-    renderAiReport(entry.aiReport);
+    const preserveResearchQuality = Boolean(entry.quality?.kind?.startsWith('research-quality'));
+    renderAiReport(entry.aiReport, { preserveQuality: preserveResearchQuality });
     document.getElementById('tabAiBtn')?.click();
   }
   closeHistory();
@@ -200,7 +201,8 @@ function renderRows(entries, mode) {
     const sources = entry.sourceCount ?? entry.payload?.items?.length ?? 0;
     const hasAi = entry.hasAiReport ?? Boolean(entry.aiReport);
     const scoreValue = entry.qualityScore ?? entry.quality?.score;
-    const score = scoreValue ? ` · Evidence ${scoreValue}/100` : '';
+    const scoreName = entry.quality?.kind?.startsWith('research-quality') ? 'Research' : 'Evidence';
+    const score = scoreValue ? ` · ${scoreName} ${scoreValue}/100` : '';
     meta.textContent = `${date} · источников: ${sources}${hasAi ? ' · AI-отчёт' : ''}${score}`;
     info.append(title, meta);
 
