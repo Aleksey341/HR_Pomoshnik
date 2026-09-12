@@ -45,6 +45,19 @@ function cleanMeta(meta) {
     researchQueries: Array.isArray(source.researchQueries) ? source.researchQueries.slice(0, 100).map((x) => text(x, 500)) : undefined,
     dateFrom: text(source.dateFrom, 40),
     broad: Boolean(source.broad),
+    processName: text(source.processName, 500),
+    processAsIs: text(source.processAsIs, 40_000),
+    processProblems: text(source.processProblems, 20_000),
+    processGoals: text(source.processGoals, 20_000),
+    processScale: text(source.processScale, 2000),
+    processGeography: text(source.processGeography, 40),
+    processGeographyLabel: text(source.processGeographyLabel, 200),
+    processResearchQuestions: Array.isArray(source.processResearchQuestions)
+      ? source.processResearchQuestions.slice(0, 20).map((x) => text(x, 1000))
+      : undefined,
+    processPlanSummary: text(source.processPlanSummary, 6000),
+    gapQueriesRun: Number(source.gapQueriesRun || 0) || undefined,
+    gapSourcesAdded: Number(source.gapSourcesAdded || 0) || undefined,
   };
 }
 
