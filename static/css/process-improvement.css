@@ -11,6 +11,9 @@
   justify-content: center;
   padding: 4vh 1rem;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   background: rgba(5, 7, 12, .78);
   backdrop-filter: blur(8px);
 }
@@ -152,14 +155,27 @@
 @media (max-width: 720px) {
   .process-improvement-overlay {
     padding: 0;
-    align-items: stretch;
+    align-items: flex-start;
+    justify-content: flex-start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+
+  .process-improvement-overlay.visible {
+    display: block;
   }
 
   .process-improvement-dialog {
+    width: 100%;
     min-height: 100vh;
+    min-height: 100dvh;
+    height: auto;
     border-radius: 0;
     border-left: 0;
     border-right: 0;
+    overflow: visible;
   }
 
   .process-improvement-head {
@@ -168,7 +184,7 @@
   }
 
   .process-improvement-form {
-    padding: 1rem;
+    padding: 1rem 1rem max(2rem, env(safe-area-inset-bottom));
   }
 
   .process-two-cols {
