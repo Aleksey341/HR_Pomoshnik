@@ -12,6 +12,16 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/usage/me", "destination": "/api/[...path]?path=usage/me" },
+    { "source": "/api/research/list", "destination": "/api/[...path]?path=research/list" },
+    { "source": "/api/research/get", "destination": "/api/[...path]?path=research/get" },
+    { "source": "/api/research/save", "destination": "/api/[...path]?path=research/save" },
+    { "source": "/api/research/delete", "destination": "/api/[...path]?path=research/delete" },
+    { "source": "/api/monitor/list", "destination": "/api/[...path]?path=monitor/list" },
+    { "source": "/api/monitor/save", "destination": "/api/[...path]?path=monitor/save" },
+    { "source": "/api/monitor/delete", "destination": "/api/[...path]?path=monitor/delete" },
+    { "source": "/api/monitor/run", "destination": "/api/[...path]?path=monitor/run" },
+    { "source": "/api/cron/monitor", "destination": "/api/[...path]?path=cron/monitor" },
     { "source": "/", "destination": "/docs/index.html" },
     { "source": "/admin", "destination": "/admin.html" },
     { "source": "/static/:path*", "destination": "/docs/static/:path*" },
@@ -22,6 +32,24 @@
       "source": "/api/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/docs/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/static/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
       ]
     },
     {
