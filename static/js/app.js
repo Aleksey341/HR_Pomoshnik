@@ -126,7 +126,7 @@ async function applyRuntimeUi() {
 
   document.title = 'HR Помощник';
   if (brand) brand.textContent = 'HR Помощник';
-  if (heroTitle) heroTitle.textContent = 'HR Помощник: поиск, исследования и AI-анализ';
+  if (heroTitle) heroTitle.textContent = 'HR Помощник';
 
   if (runtime.managed) {
     applyManagedUiLimits();
@@ -144,9 +144,9 @@ async function applyRuntimeUi() {
     }
     if (openAiField) openAiField.style.display = 'none';
     if (aiPanelHint) aiPanelHint.textContent = 'Используйте уже собранные материалы. HR Помощник проанализирует источники, сформирует выводы и сохранит ссылки на доказательства.';
-    if (aiButton) aiButton.setAttribute('data-tip', 'Проанализирует собранные источники и сформирует evidence-отчёт');
-    if (aiCopyButton) aiCopyButton.setAttribute('data-tip', 'Скопирует сформированный промпт и собранные материалы для использования в ChatGPT');
-    if (heroLead) heroLead.textContent = 'Выберите задачу: провести исследование, найти информацию или получить выводы по собранным материалам.';
+    if (aiButton) aiButton.setAttribute('data-tip', 'Проанализирует собранные источники и сформирует доказательный отчёт');
+    if (aiCopyButton) aiCopyButton.setAttribute('data-tip', 'Скопирует сформированные материалы для внешнего анализа');
+    if (heroLead) heroLead.textContent = 'Исследуйте HR-темы, сравнивайте практики и улучшайте процессы на основе проверяемых источников.';
     if (banner) banner.textContent = 'Защищённый режим: для работы нужен только персональный код доступа HRP.';
     installAccessCheck(runtime, apiField, apiInput);
     installAiNavigation();
@@ -164,8 +164,10 @@ async function bootstrap() {
   ensureFeatureStyles();
   initStorage();
 
+  let runtime = null;
   try {
-    await applyRuntimeUi();
+    runtime = await applyRuntimeUi();
+    if (!runtime?.managed) document.body.classList.remove('friendly-shell-pending');
   } catch (err) {
     console.warn('Runtime UI config:', err);
   }
@@ -174,15 +176,18 @@ async function bootstrap() {
     await loadLegacy();
   } catch (err) {
     console.error(err);
+    document.body.classList.remove('friendly-shell-pending');
     alert('Не удалось загрузить интерфейс: ' + (err.message || err));
     return;
   }
 
   try {
-    const runtime = await applyRuntimeUi();
+    runtime = await applyRuntimeUi();
     installFriendlyUi(runtime);
+    if (!runtime?.managed) document.body.classList.remove('friendly-shell-pending');
     installProcessImprovement();
   } catch (err) {
+    document.body.classList.remove('friendly-shell-pending');
     console.warn('Runtime UI config after legacy:', err);
   }
 }
