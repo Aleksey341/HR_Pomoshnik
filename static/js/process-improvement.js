@@ -12,9 +12,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const SEARCH_LIMIT = 5;
 const MAX_SEARCH_QUERIES = 12;
 const SOURCE_CONTEXT_LIMIT = 112_000;
+const WIZARD_STEPS = 3;
 
 let installed = false;
 let running = false;
+let wizardStep = 1;
+let lastDialogTrigger = null;
 
 function el(id) {
   return document.getElementById(id);
@@ -200,6 +203,12 @@ async function buildImprovementReport(plan, input, items) {
   return String(report || '').split(/\n##\s+Реестр источников\b/i)[0].trim() + buildSourceRegister(items);
 }
 
+function selectedProblems() {
+  return [...document.querySelectorAll('[data-process-problem]:checked')]
+    .map((item) => item.value.trim())
+    .filter(Boolean);
+}
+
 function inputValues() {
   const geography = el('processGeography')?.value || 'both';
   const labels = {
@@ -207,10 +216,12 @@ function inputValues() {
     russia: 'Россия',
     world: 'мировой рынок',
   };
+  const detailedProblems = el('processProblems')?.value?.trim() || '';
+  const problems = [...new Set([...selectedProblems(), detailedProblems].filter(Boolean))].join('; ');
   return {
     processName: el('processName')?.value?.trim() || '',
     asIs: el('processAsIs')?.value?.trim() || '',
-    problems: el('processProblems')?.value?.trim() || '',
+    problems,
     goals: el('processGoals')?.value?.trim() || '',
     scale: el('processScale')?.value?.trim() || '',
     geography,
@@ -225,55 +236,139 @@ function setProcessStatus(text, progress = null) {
   if (bar && Number.isFinite(progress)) bar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
 }
 
-function closeDialog() {
-  if (running) return;
-  el('processImprovementOverlay')?.classList.remove('visible');
+function focusableElements() {
+  const dialog = document.querySelector('#processImprovementOverlay .process-improvement-dialog');
+  if (!dialog) return [];
+  return [...dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, [href], [tabindex]:not([tabindex="-1"])')]
+    .filter((node) => !node.hidden && node.offsetParent !== null);
 }
 
-function openDialog() {
+function focusStep(step) {
+  const target = step === 1 ? el('processName') : step === 2 ? document.querySelector('[data-process-problem]') : el('processGeography');
+  requestAnimationFrame(() => target?.focus());
+}
+
+function updateWizard(step, { focus = true } = {}) {
+  wizardStep = Math.max(1, Math.min(WIZARD_STEPS, Number(step) || 1));
+  document.querySelectorAll('[data-process-step]').forEach((section) => {
+    section.hidden = Number(section.dataset.processStep) !== wizardStep;
+  });
+  const label = el('processWizardLabel');
+  if (label) label.textContent = `Шаг ${wizardStep} из ${WIZARD_STEPS}`;
+  const bar = el('processWizardBar');
+  if (bar) bar.style.width = `${(wizardStep / WIZARD_STEPS) * 100}%`;
+  const back = el('btnProcessBack');
+  const next = el('btnProcessNext');
+  const run = el('btnRunProcessImprovement');
+  if (back) back.hidden = wizardStep === 1;
+  if (next) next.hidden = wizardStep === WIZARD_STEPS;
+  if (run) run.hidden = wizardStep !== WIZARD_STEPS;
+  const stepNames = ['Процесс сейчас', 'Что улучшить', 'Параметры исследования'];
+  const description = el('processWizardDescription');
+  if (description) description.textContent = stepNames[wizardStep - 1];
+  if (focus) focusStep(wizardStep);
+}
+
+function validateWizardStep(step) {
+  if (step === 1) {
+    const processName = el('processName')?.value?.trim() || '';
+    const asIs = el('processAsIs')?.value?.trim() || '';
+    if (!processName) {
+      setProcessStatus('Укажите, какой HR-процесс нужно улучшить.');
+      el('processName')?.focus();
+      return false;
+    }
+    if (asIs.length < 80) {
+      setProcessStatus('Опишите текущий процесс подробнее: кто участвует, какие шаги, системы, согласования, ожидания и ручные действия есть сейчас.');
+      el('processAsIs')?.focus();
+      return false;
+    }
+  }
+  setProcessStatus('');
+  return true;
+}
+
+function closeDialog({ restoreFocus = true } = {}) {
+  if (running) return;
+  const overlay = el('processImprovementOverlay');
+  overlay?.classList.remove('visible');
+  document.body.classList.remove('process-dialog-open');
+  if (restoreFocus && lastDialogTrigger && typeof lastDialogTrigger.focus === 'function') {
+    lastDialogTrigger.focus();
+  }
+  lastDialogTrigger = null;
+}
+
+function openDialog(event = null) {
   if (!getApiKey()) {
-    el('friendlyAccessState') && (el('friendlyAccessState').textContent = 'Сначала войдите по персональному коду HRP.');
+    if (el('friendlyAccessState')) el('friendlyAccessState').textContent = 'Сначала войдите по персональному коду HRP.';
     el('apiKey')?.focus();
     el('friendlyAccess')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
+  lastDialogTrigger = event?.currentTarget || document.activeElement;
+  updateWizard(1, { focus: false });
+  setProcessStatus('');
+  const progress = el('processImprovementBar');
+  if (progress) progress.style.width = '0%';
   el('processImprovementOverlay')?.classList.add('visible');
+  document.body.classList.add('process-dialog-open');
+  focusStep(1);
+}
+
+function handleDialogKeydown(event) {
+  const overlay = el('processImprovementOverlay');
+  if (!overlay?.classList.contains('visible')) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeDialog();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusables = focusableElements();
+  if (!focusables.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function showResultWorkspace(processName) {
   el('processImprovementOverlay')?.classList.remove('visible');
+  document.body.classList.remove('process-dialog-open');
   document.body.classList.add('workspace-open');
   const title = el('friendlyWorkspaceTitle');
   const subtitle = el('friendlyWorkspaceSubtitle');
   if (title) title.textContent = 'Аудит и улучшение HR-процесса';
-  if (subtitle) subtitle.textContent = processName ? `Процесс: ${processName}. AS-IS, лучшие практики и целевой TO-BE.` : 'AS-IS, лучшие практики и целевой TO-BE.';
+  if (subtitle) subtitle.textContent = processName ? `Процесс: ${processName}. Текущая схема, лучшие практики и целевой вариант.` : 'Текущая схема, лучшие практики и целевой вариант.';
   el('tabAiBtn')?.click();
   el('friendlyWorkspaceHead')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function runProcessImprovement() {
   if (running) return;
+  if (!validateWizardStep(1)) {
+    updateWizard(1, { focus: false });
+    return;
+  }
   const input = inputValues();
-  if (!input.processName) {
-    setProcessStatus('Укажите название HR-процесса.');
-    el('processName')?.focus();
-    return;
-  }
-  if (input.asIs.length < 80) {
-    setProcessStatus('Опишите текущий процесс подробнее: роли, шаги, системы, согласования и проблемные места. Желательно не менее нескольких предложений.');
-    el('processAsIs')?.focus();
-    return;
-  }
 
   running = true;
   const button = el('btnRunProcessImprovement');
+  const back = el('btnProcessBack');
   if (button) {
     button.disabled = true;
     button.textContent = 'Проводим аудит…';
   }
+  if (back) back.disabled = true;
 
   try {
-    setProcessStatus('1/4. Разбираем текущий процесс AS-IS, роли, потери и риски…', 12);
+    setProcessStatus('1/4. Разбираем текущий процесс, роли, потери и риски…', 12);
     const plan = await makeProcessPlan(input);
 
     setProcessStatus('2/4. Ищем российские и мировые практики, кейсы и инструменты улучшения…', 32);
@@ -302,18 +397,18 @@ async function runProcessImprovement() {
     setLastPayload({ title: `Практики для улучшения процесса: ${input.processName}`, items: collected.items, meta });
     renderResults(`Практики для улучшения процесса: ${input.processName}`, collected.items, meta);
 
-    setProcessStatus(`3/4. Найдено ${collected.items.length} источников. Проектируем TO-BE и выбираем инструменты…`, 63);
+    setProcessStatus(`3/4. Найдено ${collected.items.length} источников. Проектируем целевой процесс и выбираем инструменты…`, 63);
     const report = await buildImprovementReport(plan, input, collected.items);
     renderAiReport(report, {
       resultsTitle: 'Аудит и улучшение HR-процесса',
       kicker: 'HR ПОМОЩНИК · PROCESS EXCELLENCE',
-      title: `Аудит и целевой TO-BE: ${input.processName}`,
+      title: `Аудит и целевой процесс: ${input.processName}`,
     });
 
     showResultWorkspace(input.processName);
     setProcessStatus('4/4. Проверяем полноту, источники, факты и недостающие доказательства…', 82);
     await runResearchQualityAudit(report, true);
-    setProcessStatus('Готово. Аудит процесса, benchmark практик, TO-BE и проверка качества сформированы.', 100);
+    setProcessStatus('Готово. Аудит процесса, сравнение практик, целевой процесс и проверка качества сформированы.', 100);
     await refreshUsageQuietly();
   } catch (error) {
     console.error('Process improvement failed:', error);
@@ -324,67 +419,117 @@ async function runProcessImprovement() {
       button.disabled = false;
       button.textContent = 'Исследовать и улучшить процесс';
     }
+    if (back) back.disabled = false;
   }
 }
 
 function buildDialog() {
+  if (el('processImprovementOverlay')) return;
   const overlay = document.createElement('div');
   overlay.id = 'processImprovementOverlay';
   overlay.className = 'process-improvement-overlay';
   overlay.innerHTML = `
-    <section class="process-improvement-dialog" role="dialog" aria-modal="true" aria-labelledby="processImprovementTitle">
+    <section class="process-improvement-dialog" role="dialog" aria-modal="true" aria-labelledby="processImprovementTitle" aria-describedby="processImprovementDescription">
       <div class="process-improvement-head">
         <div>
           <div class="friendly-kicker">HR PROCESS EXCELLENCE</div>
-          <h2 id="processImprovementTitle">Аудит и улучшение HR-процесса</h2>
-          <p>Опишите, как процесс работает сейчас. Помощник найдёт потери, исследует практики в России и мире, подберёт инструменты и спроектирует TO-BE.</p>
+          <h2 id="processImprovementTitle">Улучшить HR-процесс</h2>
+          <p id="processImprovementDescription">Опишите процесс простыми словами. Помощник сам применит процессные методики, найдёт практики и предложит улучшения.</p>
         </div>
-        <button type="button" class="btn-sm" id="btnCloseProcessImprovement">Закрыть</button>
+        <button type="button" class="btn-sm process-close" id="btnCloseProcessImprovement" aria-label="Закрыть аудит процесса">Закрыть</button>
       </div>
+
+      <div class="process-wizard-head" aria-live="polite">
+        <div><strong id="processWizardLabel">Шаг 1 из 3</strong><span id="processWizardDescription">Процесс сейчас</span></div>
+        <div class="process-wizard-progress" aria-hidden="true"><span id="processWizardBar"></span></div>
+      </div>
+
       <div class="process-improvement-form">
-        <label class="process-field"><span>1. Какой процесс улучшаем?</span><input id="processName" type="text" placeholder="Например: увольнение сотрудника, адаптация новичка, подбор персонала"></label>
-        <label class="process-field"><span>2. Как он работает сейчас - AS-IS?</span><textarea id="processAsIs" rows="9" placeholder="Опишите шаги по порядку: кто инициирует процесс, кто участвует, какие документы и системы используются, где согласования, ожидания, ручной ввод и передача данных."></textarea></label>
-        <div class="process-two-cols">
-          <label class="process-field"><span>Что сейчас не устраивает?</span><textarea id="processProblems" rows="4" placeholder="Долгое согласование, двойной ввод, ошибки, Excel, письма, нет контроля SLA…"></textarea></label>
-          <label class="process-field"><span>Какой результат нужен?</span><textarea id="processGoals" rows="4" placeholder="Сократить срок, убрать ручной ввод, повысить контроль, снизить ошибки…"></textarea></label>
-        </div>
-        <div class="process-two-cols">
-          <label class="process-field"><span>Масштаб процесса</span><input id="processScale" type="text" placeholder="Например: 8 000 сотрудников, 250 увольнений в месяц"></label>
-          <label class="process-field"><span>Где искать практики?</span><select id="processGeography"><option value="both">Россия и мир</option><option value="russia">Россия</option><option value="world">Мировой рынок</option></select></label>
-        </div>
-        <details class="process-methods">
-          <summary>Какие методы и инструменты будет оценивать помощник</summary>
-          <div class="process-method-grid">
-            <span>Lean / Muda</span><span>5 Why</span><span>SIPOC</span><span>RACI</span><span>VSM</span><span>Pareto</span><span>BPMN</span><span>Workflow</span><span>Интеграция / API</span><span>RPA / робот</span><span>AI / AI-agent</span><span>Process Mining</span><span>Цифровой двойник / симуляция</span>
+        <section class="process-step" data-process-step="1" id="processStep1">
+          <label class="process-field"><span>Какой процесс хотите улучшить?</span><input id="processName" type="text" placeholder="Например: увольнение сотрудника, адаптация новичка, подбор персонала" autocomplete="off"></label>
+          <label class="process-field"><span>Как он работает сейчас?</span><textarea id="processAsIs" rows="9" placeholder="Опишите по порядку: кто начинает процесс, кто участвует, что делает каждый участник, какие документы и системы используются, где приходится ждать, согласовывать или вводить данные вручную."></textarea></label>
+          <p class="process-help">Не обязательно использовать профессиональные термины. Достаточно описать процесс так, как вы объяснили бы его коллеге.</p>
+        </section>
+
+        <section class="process-step" data-process-step="2" id="processStep2" hidden>
+          <fieldset class="process-problem-picker">
+            <legend>Что сейчас мешает процессу?</legend>
+            <div class="process-problem-grid">
+              <label><input type="checkbox" data-process-problem value="Долгое согласование"> <span>Долго согласуется</span></label>
+              <label><input type="checkbox" data-process-problem value="Много ручной работы"> <span>Много ручной работы</span></label>
+              <label><input type="checkbox" data-process-problem value="Дублирование ввода данных"> <span>Дублируется ввод</span></label>
+              <label><input type="checkbox" data-process-problem value="Частые ошибки и переделки"> <span>Ошибки и переделки</span></label>
+              <label><input type="checkbox" data-process-problem value="Нет контроля сроков и SLA"> <span>Нет контроля сроков</span></label>
+              <label><input type="checkbox" data-process-problem value="Слишком много писем, Excel и ручных передач"> <span>Письма и Excel</span></label>
+            </div>
+          </fieldset>
+          <label class="process-field"><span>Другие проблемы или детали, необязательно</span><textarea id="processProblems" rows="4" placeholder="Например: один и тот же документ проверяют три подразделения, статус приходится уточнять вручную"></textarea></label>
+          <label class="process-field"><span>Какой результат хотелось бы получить?</span><textarea id="processGoals" rows="4" placeholder="Например: сократить срок процесса, убрать повторный ввод, видеть статус и ответственных, снизить количество ошибок"></textarea></label>
+        </section>
+
+        <section class="process-step" data-process-step="3" id="processStep3" hidden>
+          <div class="process-two-cols">
+            <label class="process-field"><span>Масштаб процесса, необязательно</span><input id="processScale" type="text" placeholder="Например: 8 000 сотрудников, 250 операций в месяц"></label>
+            <label class="process-field"><span>Где искать лучшие практики?</span><select id="processGeography"><option value="both">Россия и мир</option><option value="russia">Россия</option><option value="world">Мировой рынок</option></select></label>
           </div>
-          <p>Правило выбора: сначала убрать лишнее и упростить процесс, затем интегрировать и автоматизировать. Робот и AI рекомендуются только там, где они действительно нужны.</p>
-        </details>
-        <div class="process-progress"><span id="processImprovementBar"></span></div>
-        <p class="process-status" id="processImprovementStatus">Готов к анализу.</p>
-        <button type="button" class="btn-run process-run" id="btnRunProcessImprovement">Исследовать и улучшить процесс</button>
+          <details class="process-methods">
+            <summary>Что именно проверит помощник</summary>
+            <div class="process-method-grid">
+              <span>Лишние шаги и ожидания</span><span>Причины проблем</span><span>Роли и ответственность</span><span>Workflow</span><span>Интеграции</span><span>RPA / робот</span><span>AI / AI-agent</span><span>Process Mining</span><span>Симуляция процесса</span>
+            </div>
+            <p>Сначала помощник попробует убрать или упростить лишние действия. Автоматизация, робот или AI предлагаются только там, где они действительно оправданы.</p>
+          </details>
+          <div class="process-progress" aria-hidden="true"><span id="processImprovementBar"></span></div>
+          <p class="process-status" id="processImprovementStatus" role="status"></p>
+        </section>
+
+        <div class="process-wizard-actions">
+          <button type="button" class="btn-sm process-back" id="btnProcessBack" hidden>← Назад</button>
+          <div class="process-wizard-actions-main">
+            <button type="button" class="btn-run process-next" id="btnProcessNext">Продолжить</button>
+            <button type="button" class="btn-run process-run" id="btnRunProcessImprovement" hidden>Исследовать и улучшить процесс</button>
+          </div>
+        </div>
       </div>
     </section>`;
+
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) closeDialog();
   });
   document.body.append(overlay);
-  el('btnCloseProcessImprovement')?.addEventListener('click', closeDialog);
+
+  el('btnCloseProcessImprovement')?.addEventListener('click', () => closeDialog());
+  el('btnProcessBack')?.addEventListener('click', () => updateWizard(wizardStep - 1));
+  el('btnProcessNext')?.addEventListener('click', () => {
+    if (!validateWizardStep(wizardStep)) return;
+    updateWizard(wizardStep + 1);
+  });
   el('btnRunProcessImprovement')?.addEventListener('click', runProcessImprovement);
+  document.addEventListener('keydown', handleDialogKeydown);
+  updateWizard(1, { focus: false });
 }
 
 function installHomeCard() {
   const grid = document.querySelector('.friendly-task-grid');
-  if (!grid || el('friendlyProcessImprovement')) return;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.id = 'friendlyProcessImprovement';
-  button.className = 'friendly-task-card friendly-process-card';
-  button.innerHTML = `
-    <span class="friendly-task-icon">↻</span>
-    <span><strong>Улучшить HR-процесс</strong><small>Разобрать AS-IS, найти лучшие практики, выбрать инструменты и спроектировать TO-BE.</small></span>
-    <span class="friendly-arrow">→</span>`;
-  button.addEventListener('click', openDialog);
-  grid.append(button);
+  if (!grid) return;
+  let button = el('friendlyProcessImprovement');
+  if (!button) {
+    button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'friendlyProcessImprovement';
+    button.className = 'friendly-task-card friendly-process-card';
+    button.innerHTML = `
+      <span class="friendly-task-icon">↻</span>
+      <span><strong>Улучшить HR-процесс</strong><small>Разобрать текущий процесс, найти практики и спроектировать более эффективный вариант.</small></span>
+      <span class="friendly-arrow">→</span>`;
+    const searchCard = grid.querySelector('[data-friendly-tab="search"]');
+    if (searchCard) grid.insertBefore(button, searchCard);
+    else grid.append(button);
+  }
+  if (button.dataset.processWired !== '1') {
+    button.dataset.processWired = '1';
+    button.addEventListener('click', openDialog);
+  }
 }
 
 export function installProcessImprovement() {
