@@ -83,7 +83,7 @@ jobs:
         run: node -e "import('@vercel/blob').then(() => console.log('Vercel Blob SDK resolved'))"
 
       - name: Run Node tests
-        run: node --test tests/managed-access.test.mjs tests/evidence-quality.test.mjs tests/rate-limit.test.mjs tests/research-quality.test.mjs
+        run: node --test tests/managed-access.test.mjs tests/evidence-quality.test.mjs tests/rate-limit.test.mjs tests/research-quality.test.mjs tests/frontend-ux.test.mjs
 
       - name: Reject committed API secrets
         shell: bash
