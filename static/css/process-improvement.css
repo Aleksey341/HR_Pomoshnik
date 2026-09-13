@@ -1,5 +1,5 @@
 .friendly-process-card {
-  border-color: color-mix(in srgb, var(--accent, #7c3aed) 55%, var(--border, #2b2f3a));
+  border-color: rgba(34, 197, 94, .42);
 }
 
 body.process-dialog-open {
@@ -27,12 +27,19 @@ body.process-dialog-open {
 }
 
 .process-improvement-dialog {
+  --process-accent: #22c55e;
+  --process-accent-soft: #86efac;
+  --process-accent-bg: rgba(34, 197, 94, .08);
   width: min(780px, 100%);
   border: 1px solid var(--border, #2b2f3a);
   border-radius: 20px;
   background: var(--bg-card, #121722);
   box-shadow: 0 24px 80px rgba(0, 0, 0, .38);
   overflow: hidden;
+}
+
+.process-improvement-dialog .friendly-kicker {
+  color: var(--process-accent-soft);
 }
 
 .process-improvement-head {
@@ -76,7 +83,7 @@ body.process-dialog-open {
 
 .process-wizard-head strong {
   font-size: .82rem;
-  color: #fdba74;
+  color: var(--process-accent-soft);
 }
 
 .process-wizard-head span {
@@ -98,7 +105,7 @@ body.process-dialog-open {
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent, #f97316);
+  background: var(--process-accent);
   transition: width .25s ease;
 }
 
@@ -147,11 +154,16 @@ body.process-dialog-open {
   resize: vertical;
 }
 
+#processAsIs {
+  min-height: 150px;
+  max-height: 360px;
+}
+
 .process-field input:focus,
 .process-field textarea:focus,
 .process-field select:focus {
-  border-color: rgba(249, 115, 22, .72);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, .11);
+  border-color: rgba(34, 197, 94, .72);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, .11);
   outline: none;
 }
 
@@ -192,13 +204,13 @@ body.process-dialog-open {
 }
 
 .process-problem-grid label:has(input:checked) {
-  border-color: rgba(249, 115, 22, .5);
-  background: rgba(249, 115, 22, .07);
+  border-color: rgba(34, 197, 94, .5);
+  background: var(--process-accent-bg);
 }
 
 .process-problem-grid input {
   margin-top: .15rem;
-  accent-color: var(--accent, #f97316);
+  accent-color: var(--process-accent);
 }
 
 .process-two-cols {
@@ -254,7 +266,8 @@ body.process-dialog-open {
   align-items: center;
   justify-content: space-between;
   gap: .75rem;
-  padding-top: .2rem;
+  padding-top: .35rem;
+  border-top: 1px solid rgba(255, 255, 255, .045);
 }
 
 .process-wizard-actions-main {
@@ -268,6 +281,15 @@ body.process-dialog-open {
 .process-run {
   width: min(320px, 100%);
   margin: 0;
+  border-color: var(--process-accent) !important;
+  background: var(--process-accent) !important;
+  color: #06120a !important;
+  font-weight: 800;
+}
+
+.process-next:hover,
+.process-run:hover {
+  filter: brightness(1.06);
 }
 
 .process-back {
@@ -279,7 +301,7 @@ body.process-dialog-open {
 .process-improvement-dialog textarea:focus-visible,
 .process-improvement-dialog select:focus-visible,
 .process-improvement-dialog summary:focus-visible {
-  outline: 3px solid rgba(253, 186, 116, .5);
+  outline: 3px solid rgba(134, 239, 172, .5);
   outline-offset: 2px;
 }
 
@@ -340,6 +362,7 @@ body.process-dialog-open {
   .process-wizard-actions {
     align-items: stretch;
     flex-direction: column-reverse;
+    padding-top: .7rem;
   }
 
   .process-wizard-actions-main,
