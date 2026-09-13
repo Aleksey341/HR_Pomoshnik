@@ -14,7 +14,7 @@
 .friendly-intro h1{font-size:clamp(1.8rem,6vw,2.7rem);line-height:1.12;margin:0 0 .65rem;max-width:720px}
 .friendly-intro p{color:var(--text-muted);font-size:1rem;max-width:720px}
 
-.friendly-access{margin:1.3rem 0 1.5rem;padding:1.15rem;background:linear-gradient(135deg,rgba(34,197,94,.07),rgba(20,24,32,.96));border:1px solid rgba(34,197,94,.26);border-radius:16px}
+.friendly-access{margin:1.3rem 0 1.5rem;padding:1.15rem;background:linear-gradient(135deg,rgba(34,197,94,.07),rgba(20,24,32,.96));border:1px solid rgba(34,197,94,.26);border-radius:16px;transition:padding .18s ease,margin .18s ease,background .18s ease}
 .friendly-section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:.9rem}
 .friendly-section-head h2,.friendly-section-title h2{font-size:1.18rem;margin:.15rem 0 .2rem}
 .friendly-section-head p{font-size:.84rem;color:var(--text-muted);max-width:620px}
@@ -33,6 +33,14 @@
 .friendly-access-ok span{font-size:.76rem;color:var(--text-muted);margin-top:.15rem}
 .friendly-ui.access-ready #friendlyAccessSlot{display:none}
 .friendly-ui.access-ready .friendly-access-ok{display:flex}
+.friendly-ui.access-ready .friendly-access{margin:.75rem 0 1rem;padding:.62rem .75rem;border-radius:12px;background:rgba(34,197,94,.055)}
+.friendly-ui.access-ready .friendly-access .friendly-section-head{display:none}
+.friendly-ui.access-ready .friendly-access-ok{padding:.12rem .2rem;border:0;background:transparent;border-radius:0}
+.friendly-ui.access-ready .friendly-access-ok>div{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;min-width:0}
+.friendly-ui.access-ready .friendly-access-ok strong,.friendly-ui.access-ready .friendly-access-ok span{display:inline;margin:0}
+.friendly-ui.access-ready .friendly-access-ok strong::before{content:'✓';display:inline-block;margin-right:.45rem;color:#86efac;font-weight:800}
+.friendly-ui.access-ready .friendly-access-ok .btn-sm{padding:.38rem .58rem;font-size:.72rem}
+.friendly-ui.access-ready .friendly-section-title{margin-top:1rem}
 
 .friendly-after-access{transition:opacity .18s ease,filter .18s ease}
 .friendly-ui:not(.access-ready) .friendly-after-access{opacity:.42;filter:saturate(.55);pointer-events:none;user-select:none}
@@ -129,12 +137,16 @@
   .friendly-plan-button{width:100%;padding:.55rem .7rem!important}
   .friendly-access-ok{align-items:flex-start;flex-direction:column}
   .friendly-access-ok .btn-sm{width:100%}
+  .friendly-ui.access-ready .friendly-access{padding:.65rem .7rem}
+  .friendly-ui.access-ready .friendly-access-ok>div{display:block}
+  .friendly-ui.access-ready .friendly-access-ok strong,.friendly-ui.access-ready .friendly-access-ok span{display:block}
+  .friendly-ui.access-ready .friendly-access-ok span{margin:.18rem 0 0 1.3rem}
   .friendly-advanced>.field,.friendly-advanced>.field-row,.friendly-advanced>.checks,.friendly-advanced>.research-scrape-row{margin-left:.65rem;margin-right:.65rem}
   .friendly-advanced .field-row{grid-template-columns:1fr}
 }
 
 @media (prefers-reduced-motion: reduce){
-  .friendly-task-card,.friendly-after-access{transition:none}
+  .friendly-task-card,.friendly-after-access,.friendly-access{transition:none}
   .friendly-task-card:hover{transform:none}
   html:focus-within{scroll-behavior:auto}
 }
