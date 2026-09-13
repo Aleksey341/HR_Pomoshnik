@@ -2,6 +2,10 @@
   border-color: color-mix(in srgb, var(--accent, #7c3aed) 55%, var(--border, #2b2f3a));
 }
 
+body.process-dialog-open {
+  overflow: hidden;
+}
+
 .process-improvement-overlay {
   position: fixed;
   inset: 0;
@@ -23,10 +27,10 @@
 }
 
 .process-improvement-dialog {
-  width: min(980px, 100%);
+  width: min(780px, 100%);
   border: 1px solid var(--border, #2b2f3a);
   border-radius: 20px;
-  background: var(--card, #121722);
+  background: var(--bg-card, #121722);
   box-shadow: 0 24px 80px rgba(0, 0, 0, .38);
   overflow: hidden;
 }
@@ -35,7 +39,7 @@
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.4rem 1.5rem;
+  padding: 1.35rem 1.45rem 1.1rem;
   border-bottom: 1px solid var(--border, #2b2f3a);
 }
 
@@ -45,15 +49,73 @@
 
 .process-improvement-head p {
   margin: 0;
-  max-width: 760px;
+  max-width: 650px;
   color: var(--text-muted, #9aa4b2);
   line-height: 1.5;
+}
+
+.process-close {
+  align-self: flex-start;
+  flex: 0 0 auto;
+}
+
+.process-wizard-head {
+  display: grid;
+  gap: .7rem;
+  padding: .9rem 1.45rem;
+  border-bottom: 1px solid var(--border, #2b2f3a);
+  background: rgba(255, 255, 255, .015);
+}
+
+.process-wizard-head > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.process-wizard-head strong {
+  font-size: .82rem;
+  color: #fdba74;
+}
+
+.process-wizard-head span {
+  font-size: .78rem;
+  color: var(--text-muted, #9aa4b2);
+}
+
+.process-wizard-progress,
+.process-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border, #2b2f3a) 60%, transparent);
+}
+
+.process-wizard-progress span,
+.process-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #f97316);
+  transition: width .25s ease;
 }
 
 .process-improvement-form {
   display: grid;
   gap: 1rem;
-  padding: 1.4rem 1.5rem 1.6rem;
+  padding: 1.25rem 1.45rem 1.45rem;
+}
+
+.process-step {
+  display: grid;
+  gap: 1rem;
+}
+
+.process-step[hidden],
+.process-wizard-actions [hidden] {
+  display: none !important;
 }
 
 .process-field {
@@ -61,7 +123,8 @@
   gap: .45rem;
 }
 
-.process-field > span {
+.process-field > span,
+.process-problem-picker legend {
   font-size: .88rem;
   font-weight: 700;
 }
@@ -74,7 +137,7 @@
   border: 1px solid var(--border, #2b2f3a);
   border-radius: 12px;
   padding: .8rem .9rem;
-  background: var(--input, #0d121b);
+  background: var(--bg-input, #0d121b);
   color: var(--text, #f3f4f6);
   font: inherit;
   line-height: 1.45;
@@ -82,6 +145,60 @@
 
 .process-field textarea {
   resize: vertical;
+}
+
+.process-field input:focus,
+.process-field textarea:focus,
+.process-field select:focus {
+  border-color: rgba(249, 115, 22, .72);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, .11);
+  outline: none;
+}
+
+.process-help {
+  margin: -.2rem 0 0;
+  color: var(--text-muted, #9aa4b2);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.process-problem-picker {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.process-problem-picker legend {
+  margin-bottom: .65rem;
+}
+
+.process-problem-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6rem;
+}
+
+.process-problem-grid label {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  padding: .7rem .75rem;
+  border: 1px solid var(--border, #2b2f3a);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .018);
+  cursor: pointer;
+  font-size: .82rem;
+  line-height: 1.35;
+}
+
+.process-problem-grid label:has(input:checked) {
+  border-color: rgba(249, 115, 22, .5);
+  background: rgba(249, 115, 22, .07);
+}
+
+.process-problem-grid input {
+  margin-top: .15rem;
+  accent-color: var(--accent, #f97316);
 }
 
 .process-two-cols {
@@ -94,7 +211,7 @@
   border: 1px solid var(--border, #2b2f3a);
   border-radius: 12px;
   padding: .85rem 1rem;
-  background: color-mix(in srgb, var(--card, #121722) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-card, #121722) 78%, transparent);
 }
 
 .process-methods summary {
@@ -124,32 +241,46 @@
   color: var(--text-muted, #c0c7d1);
 }
 
-.process-progress {
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--border, #2b2f3a) 60%, transparent);
-}
-
-.process-progress span {
-  display: block;
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent, #7c3aed);
-  transition: width .25s ease;
-}
-
 .process-status {
-  margin: -.35rem 0 0;
+  margin: -.2rem 0 0;
   min-height: 1.25rem;
   color: var(--text-muted, #9aa4b2);
   font-size: .84rem;
   line-height: 1.45;
 }
 
+.process-wizard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding-top: .2rem;
+}
+
+.process-wizard-actions-main {
+  display: flex;
+  justify-content: flex-end;
+  gap: .65rem;
+  flex: 1;
+}
+
+.process-next,
 .process-run {
-  width: 100%;
+  width: min(320px, 100%);
+  margin: 0;
+}
+
+.process-back {
+  min-width: 92px;
+}
+
+.process-improvement-dialog button:focus-visible,
+.process-improvement-dialog input:focus-visible,
+.process-improvement-dialog textarea:focus-visible,
+.process-improvement-dialog select:focus-visible,
+.process-improvement-dialog summary:focus-visible {
+  outline: 3px solid rgba(253, 186, 116, .5);
+  outline-offset: 2px;
 }
 
 @media (max-width: 720px) {
@@ -183,11 +314,45 @@
     align-items: flex-start;
   }
 
+  .process-improvement-head p {
+    font-size: .88rem;
+  }
+
+  .process-wizard-head {
+    padding: .8rem 1rem;
+  }
+
+  .process-wizard-head > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .15rem;
+  }
+
   .process-improvement-form {
     padding: 1rem 1rem max(2rem, env(safe-area-inset-bottom));
   }
 
-  .process-two-cols {
+  .process-two-cols,
+  .process-problem-grid {
     grid-template-columns: 1fr;
+  }
+
+  .process-wizard-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .process-wizard-actions-main,
+  .process-next,
+  .process-run,
+  .process-back {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-wizard-progress span,
+  .process-progress span {
+    transition: none;
   }
 }
