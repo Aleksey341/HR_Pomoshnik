@@ -4,6 +4,7 @@ import { getApiRuntime } from './config.js';
 import { installUsageDashboard, refreshUsageQuietly } from './usage.js';
 import { installFriendlyUi } from './friendly-ui.js';
 import { installProcessImprovement } from './process-improvement.js';
+import { installUxPolish } from './ux-polish.js';
 
 window.addEventListener('pagehide', () => abortActiveRequest());
 
@@ -186,6 +187,7 @@ async function bootstrap() {
     installFriendlyUi(runtime);
     if (!runtime?.managed) document.body.classList.remove('friendly-shell-pending');
     installProcessImprovement();
+    installUxPolish();
   } catch (err) {
     document.body.classList.remove('friendly-shell-pending');
     console.warn('Runtime UI config after legacy:', err);
