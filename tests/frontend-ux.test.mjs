@@ -42,11 +42,11 @@ test('AI analysis remains available as a secondary tool', () => {
 
 test('process improvement is a three-step accessible wizard', () => {
   assert.match(processUi, /WIZARD_STEPS = 3/);
-  assert.match(processUi, /data-process-step=\\"1\\"/);
-  assert.match(processUi, /data-process-step=\\"2\\"/);
-  assert.match(processUi, /data-process-step=\\"3\\"/);
-  assert.match(processUi, /aria-modal=\\"true\\"/);
-  assert.match(processUi, /aria-describedby=\\"processImprovementDescription\\"/);
+  assert.match(processUi, /data-process-step="1"/);
+  assert.match(processUi, /data-process-step="2"/);
+  assert.match(processUi, /data-process-step="3"/);
+  assert.match(processUi, /aria-modal="true"/);
+  assert.match(processUi, /aria-describedby="processImprovementDescription"/);
   assert.match(processUi, /event\.key === 'Escape'/);
   assert.match(processUi, /event\.key !== 'Tab'/);
   assert.match(processUi, /lastDialogTrigger/);
