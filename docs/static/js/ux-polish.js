@@ -12,22 +12,26 @@ function autoGrow(textarea) {
   textarea.style.overflowY = textarea.scrollHeight > 360 ? 'auto' : 'hidden';
 }
 
+function setText(node, value) {
+  if (node && node.textContent !== value) node.textContent = value;
+}
+
 function polishProcessWizard() {
   const asIs = el('processAsIs');
   if (asIs && asIs.dataset.uxPolished !== '1') {
     asIs.dataset.uxPolished = '1';
     asIs.rows = 6;
     const label = asIs.closest('.process-field')?.querySelector(':scope > span');
-    if (label) label.textContent = 'Опишите, как процесс проходит сейчас';
+    setText(label, 'Опишите, как процесс проходит сейчас');
     asIs.addEventListener('input', () => autoGrow(asIs));
     asIs.addEventListener('focus', () => autoGrow(asIs));
   }
 
   const next = el('btnProcessNext');
-  if (next) next.textContent = 'Продолжить →';
+  setText(next, 'Продолжить →');
 
   const run = el('btnRunProcessImprovement');
-  if (run && !run.disabled) run.textContent = 'Исследовать и улучшить процесс →';
+  if (run && !run.disabled) setText(run, 'Исследовать и улучшить процесс →');
 
   const trigger = el('friendlyProcessImprovement');
   if (trigger && trigger.dataset.uxPolishWired !== '1') {
@@ -40,8 +44,7 @@ function polishProcessWizard() {
 
 function polishAccessState() {
   if (!document.body.classList.contains('access-ready')) return;
-  const state = el('friendlyAccessState');
-  if (state) state.textContent = 'Доступ подтверждён';
+  setText(el('friendlyAccessState'), 'Доступ подтверждён');
 }
 
 export function installUxPolish() {
@@ -52,8 +55,7 @@ export function installUxPolish() {
 
   window.addEventListener('hrp:access-verified', polishAccessState);
   window.addEventListener('hrp:access-rejected', () => {
-    const state = el('friendlyAccessState');
-    if (state) state.textContent = 'Введите персональный код доступа HRP.';
+    setText(el('friendlyAccessState'), 'Введите персональный код доступа HRP.');
   });
 
   const observer = new MutationObserver(() => {
