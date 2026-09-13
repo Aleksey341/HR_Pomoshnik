@@ -62,6 +62,7 @@ jobs:
           node --check static/js/app.js
           node --check static/js/friendly-ui.js
           node --check static/js/process-improvement.js
+          node --check static/js/ux-polish.js
           node --check static/js/results.js
           node --check static/js/export.js
           node --check static/js/legacy.js
