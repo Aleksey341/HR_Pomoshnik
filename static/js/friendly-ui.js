@@ -109,6 +109,9 @@ function renameCoreUi() {
   if (crawlHead) crawlHead.textContent = 'Собрать материалы с сайта';
   const crawlButton = el('btnCrawl');
   if (crawlButton) crawlButton.textContent = 'Собрать материалы';
+  document.querySelectorAll('#panel-crawl .legacy-specialized-option').forEach((node) => {
+    node.setAttribute('aria-hidden', 'true');
+  });
 
   const scrapeHead = document.querySelector('#panel-scrape .card-head');
   if (scrapeHead) scrapeHead.textContent = 'Загрузить страницу по ссылке';
@@ -145,14 +148,16 @@ function simplifyResearchPanel() {
       brief.rows = 8;
       brief.placeholder = 'Например: сравни практики удержания ИТ-специалистов у крупных работодателей России за 2024-2026 годы и предложи применимые меры.';
     }
-    const step = document.createElement('div');
-    step.className = 'friendly-step-label';
-    step.textContent = '1. Опишите задачу';
-    briefField.insertAdjacentElement('beforebegin', step);
+    if (!briefField.previousElementSibling?.classList.contains('friendly-step-label')) {
+      const step = document.createElement('div');
+      step.className = 'friendly-step-label';
+      step.textContent = '1. Опишите задачу';
+      briefField.insertAdjacentElement('beforebegin', step);
+    }
   }
 
   const planner = el('btnAiPlanResearch');
-  if (planner) {
+  if (planner && !planner.closest('.friendly-plan-row')) {
     planner.textContent = 'Сформировать план с ИИ';
     planner.classList.add('friendly-plan-button');
     const planWrap = document.createElement('div');
@@ -165,7 +170,7 @@ function simplifyResearchPanel() {
   const advanced = document.createElement('details');
   advanced.id = 'friendlyResearchAdvanced';
   advanced.className = 'friendly-advanced';
-  advanced.innerHTML = '<summary>Настройки исследования</summary><p class="hint">Обычно менять их не требуется. Здесь можно вручную настроить поисковые запросы, домены, период и объём сбора.</p>';
+  advanced.innerHTML = '<summary>Настройки исследования</summary><p class="hint">Обычно менять их не требуется. Здесь можно вручную настроить поисковые запросы, сайты, период и объём сбора.</p>';
 
   const blocks = [
     el('researchLimit')?.closest('.field-row'),
@@ -185,7 +190,7 @@ function simplifyResearchPanel() {
   }
 }
 
-function buildHome() {
+function buildHomeFallback() {
   const home = document.createElement('section');
   home.id = 'friendlyHome';
   home.className = 'friendly-home';
@@ -193,91 +198,78 @@ function buildHome() {
     <div class="friendly-intro">
       <div class="friendly-kicker">HR ПОМОЩНИК</div>
       <h1>Что вы хотите сделать?</h1>
-      <p>Выберите задачу. Технические настройки можно открыть позже, если они действительно понадобятся.</p>
+      <p>Выберите задачу. Технические настройки доступны отдельно и не мешают основному сценарию.</p>
     </div>
-
     <section class="friendly-access" id="friendlyAccess">
       <div class="friendly-section-head">
-        <div>
-          <span class="friendly-step">Вход</span>
-          <h2>Персональный доступ</h2>
-          <p>Для работы нужен только ваш код HRP. Дополнительные ключи и настройки не требуются.</p>
-        </div>
-        <div class="friendly-access-state" id="friendlyAccessState">Введите персональный код доступа HRP.</div>
+        <div><span class="friendly-step">Вход</span><h2>Персональный доступ</h2><p>Для работы нужен только ваш код HRP.</p></div>
+        <div class="friendly-access-state" id="friendlyAccessState" role="status">Введите персональный код доступа HRP.</div>
       </div>
       <div id="friendlyAccessSlot"></div>
-      <div class="friendly-access-ok">
-        <div>
-          <strong id="friendlyAccessUser">Доступ подтверждён</strong>
-          <span>Сервис готов к работе.</span>
-        </div>
-        <button type="button" class="btn-sm" id="friendlyChangeCode">Сменить код</button>
-      </div>
+      <div class="friendly-access-ok"><div><strong id="friendlyAccessUser">Доступ подтверждён</strong><span>Сервис готов к работе.</span></div><button type="button" class="btn-sm" id="friendlyChangeCode">Сменить код</button></div>
     </section>
-
     <section class="friendly-after-access">
-      <div class="friendly-section-title">
-        <span class="friendly-step">Основные задачи</span>
-        <h2>Выберите, что нужно сделать</h2>
-      </div>
+      <div class="friendly-section-title"><span class="friendly-step">Основные задачи</span><h2>Выберите, что нужно сделать</h2></div>
       <div class="friendly-task-grid">
-        <button type="button" class="friendly-task-card friendly-task-primary" data-friendly-tab="research">
-          <span class="friendly-task-icon">◎</span>
-          <span><strong>Провести исследование</strong><small>Собрать источники, сравнить практики и получить доказательный отчёт.</small></span>
-          <span class="friendly-arrow">→</span>
-        </button>
-        <button type="button" class="friendly-task-card" data-friendly-tab="search">
-          <span class="friendly-task-icon">⌕</span>
-          <span><strong>Найти информацию</strong><small>Быстро найти материалы по теме и при необходимости загрузить полный текст.</small></span>
-          <span class="friendly-arrow">→</span>
-        </button>
-        <button type="button" class="friendly-task-card" data-friendly-tab="ai">
-          <span class="friendly-task-icon">✦</span>
-          <span><strong>Получить выводы и рекомендации</strong><small>Проанализировать уже собранные материалы и получить проверяемые выводы.</small></span>
-          <span class="friendly-arrow">→</span>
-        </button>
+        <button type="button" class="friendly-task-card friendly-task-primary" data-friendly-tab="research"><span class="friendly-task-icon">◎</span><span><strong>Провести исследование</strong><small>Собрать источники, сравнить практики и получить доказательный отчёт.</small></span><span class="friendly-arrow">→</span></button>
+        <button type="button" class="friendly-task-card friendly-process-card" id="friendlyProcessImprovement"><span class="friendly-task-icon">↻</span><span><strong>Улучшить HR-процесс</strong><small>Разобрать текущий процесс, найти практики и спроектировать более эффективный вариант.</small></span><span class="friendly-arrow">→</span></button>
+        <button type="button" class="friendly-task-card" data-friendly-tab="search"><span class="friendly-task-icon">⌕</span><span><strong>Найти информацию</strong><small>Быстро найти материалы по теме.</small></span><span class="friendly-arrow">→</span></button>
       </div>
-
-      <button type="button" class="friendly-history-card" id="friendlyHistory">
-        <span><strong>Мои исследования</strong><small>Вернуться к сохранённым исследованиям и отчётам.</small></span>
-        <span class="friendly-arrow">→</span>
-      </button>
-
-      <details class="friendly-tools">
-        <summary>Дополнительные инструменты</summary>
-        <div class="friendly-tool-grid">
-          <button type="button" class="friendly-tool" data-friendly-tab="crawl"><strong>Собрать материалы с сайта</strong><span>Обойти раздел сайта и собрать страницы.</span></button>
-          <button type="button" class="friendly-tool" data-friendly-tab="scrape"><strong>Загрузить страницу по ссылке</strong><span>Добавить одну страницу в материалы.</span></button>
-          <button type="button" class="friendly-tool" id="friendlyMonitoring"><strong>Мониторинг</strong><span>Повторно проверять исследование и изменения.</span></button>
-          <button type="button" class="friendly-tool" id="friendlyLimits"><strong>Лимиты</strong><span>Посмотреть использование сервиса и доступный баланс.</span></button>
-        </div>
-      </details>
+      <button type="button" class="friendly-history-card" id="friendlyHistory"><span><strong>Мои исследования</strong><small>Вернуться к сохранённым исследованиям и отчётам.</small></span><span class="friendly-arrow">→</span></button>
+      <details class="friendly-tools"><summary>Дополнительные инструменты</summary><div class="friendly-tool-grid">
+        <button type="button" class="friendly-tool" id="friendlyAiFromMaterials"><strong>Получить выводы по материалам</strong><span>Проанализировать уже собранные источники.</span></button>
+        <button type="button" class="friendly-tool" data-friendly-tab="crawl"><strong>Собрать материалы с сайта</strong><span>Обойти раздел сайта и собрать страницы.</span></button>
+        <button type="button" class="friendly-tool" data-friendly-tab="scrape"><strong>Загрузить страницу по ссылке</strong><span>Добавить одну страницу в материалы.</span></button>
+        <button type="button" class="friendly-tool" id="friendlyMonitoring"><strong>Мониторинг</strong><span>Повторно проверять исследование и изменения.</span></button>
+        <button type="button" class="friendly-tool" id="friendlyLimits"><strong>Лимиты</strong><span>Посмотреть использование сервиса.</span></button>
+      </div></details>
     </section>`;
   return home;
 }
 
-function buildWorkspaceHeader() {
+function buildWorkspaceHeaderFallback() {
   const header = document.createElement('section');
   header.id = 'friendlyWorkspaceHead';
   header.className = 'friendly-workspace-head';
   header.innerHTML = `
     <button type="button" class="friendly-back" id="friendlyBack">← Все задачи</button>
-    <div>
-      <div class="friendly-kicker">РАБОЧАЯ ОБЛАСТЬ</div>
-      <h2 id="friendlyWorkspaceTitle">Провести исследование</h2>
-      <p id="friendlyWorkspaceSubtitle">Опишите HR-задачу, соберите источники и получите доказательный отчёт.</p>
-    </div>`;
+    <div><div class="friendly-kicker">РАБОЧАЯ ОБЛАСТЬ</div><h2 id="friendlyWorkspaceTitle">Провести исследование</h2><p id="friendlyWorkspaceSubtitle">Опишите HR-задачу, соберите источники и получите доказательный отчёт.</p></div>`;
   return header;
+}
+
+function ensureNativeShell() {
+  let home = el('friendlyHome');
+  if (!home) {
+    home = buildHomeFallback();
+    const banner = document.querySelector('.banner');
+    const hero = document.querySelector('.hero');
+    (banner || hero)?.insertAdjacentElement('afterend', home);
+  }
+  home.hidden = false;
+
+  let workspaceHead = el('friendlyWorkspaceHead');
+  if (!workspaceHead) {
+    workspaceHead = buildWorkspaceHeaderFallback();
+    document.querySelector('.wrap')?.insertAdjacentElement('beforebegin', workspaceHead);
+  }
+  workspaceHead.hidden = false;
 }
 
 function wireEvents() {
   document.querySelectorAll('[data-friendly-tab]').forEach((button) => {
+    if (button.dataset.friendlyWired === '1') return;
+    button.dataset.friendlyWired = '1';
     button.addEventListener('click', () => openWorkspace(button.dataset.friendlyTab));
   });
-  el('friendlyBack')?.addEventListener('click', closeWorkspace);
-  el('friendlyHistory')?.addEventListener('click', () => proxyClick('btnResearchHistory'));
-  el('friendlyMonitoring')?.addEventListener('click', () => proxyClick('btnMonitoring'));
-  el('friendlyLimits')?.addEventListener('click', () => proxyClick('btnUsage'));
+
+  if (el('friendlyBack')?.dataset.friendlyWired !== '1') {
+    el('friendlyBack')?.addEventListener('click', closeWorkspace);
+    if (el('friendlyBack')) el('friendlyBack').dataset.friendlyWired = '1';
+  }
+  el('friendlyHistory')?.addEventListener('click', () => proxyClick('btnResearchHistory'), { once: true });
+  el('friendlyMonitoring')?.addEventListener('click', () => proxyClick('btnMonitoring'), { once: true });
+  el('friendlyLimits')?.addEventListener('click', () => proxyClick('btnUsage'), { once: true });
+  el('friendlyAiFromMaterials')?.addEventListener('click', () => openWorkspace('ai'), { once: true });
   el('friendlyChangeCode')?.addEventListener('click', () => {
     setAccessState(false);
     const input = el('apiKey');
@@ -285,9 +277,11 @@ function wireEvents() {
       input.focus();
       input.select();
     }
-  });
+  }, { once: true });
 
   document.querySelectorAll('.tab-btn[data-tab]').forEach((button) => {
+    if (button.dataset.titleWired === '1') return;
+    button.dataset.titleWired = '1';
     button.addEventListener('click', () => setWorkspaceTitle(button.dataset.tab));
   });
 
@@ -302,10 +296,7 @@ export function installFriendlyUi(runtime) {
   installed = true;
   document.body.classList.add('friendly-ui');
 
-  const home = buildHome();
-  const banner = document.querySelector('.banner');
-  const hero = document.querySelector('.hero');
-  (banner || hero)?.insertAdjacentElement('afterend', home);
+  ensureNativeShell();
 
   const accessCard = el('apiKey')?.closest('.card');
   if (accessCard) {
@@ -313,14 +304,11 @@ export function installFriendlyUi(runtime) {
     el('friendlyAccessSlot')?.append(accessCard);
   }
 
-  const wrap = document.querySelector('.wrap');
-  const workspaceHead = buildWorkspaceHeader();
-  wrap?.insertAdjacentElement('beforebegin', workspaceHead);
-
   renameCoreUi();
   simplifyResearchPanel();
   wireEvents();
   setAccessState(false);
+  document.body.classList.remove('friendly-shell-pending');
 
   const code = getApiKey();
   if (code) {
